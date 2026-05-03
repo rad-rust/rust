@@ -3,11 +3,10 @@
 use rustc_data_structures::fx::{FxHashSet, FxIndexMap};
 use rustc_hir::find_attr;
 use rustc_middle::mir::{
-    Body, Local, LocalKind, Operand, Place, Rvalue, StatementKind, TerminatorKind, RETURN_PLACE,
+    Body, Local, LocalKind, Operand, Place, RETURN_PLACE, Rvalue, StatementKind, TerminatorKind,
 };
-use rustc_middle::ty::{self, TyCtxt};
 use rustc_middle::ty::print::with_no_trimmed_paths;
-
+use rustc_middle::ty::{self, TyCtxt};
 
 pub(super) struct RadProtectedAnalysis;
 
@@ -24,7 +23,7 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
         if !find_attr!(tcx, def_id, RadProtected(_)) {
             return;
         }
-        
+
         let sources = build_pointer_sources(body);
 
         with_no_trimmed_paths!({
@@ -38,15 +37,13 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
             eprintln!("\nReturn:");
             print_return(body, RETURN_PLACE, &sources);
 
-
             eprintln!("\nInputs:");
             for local in body.args_iter() {
                 print_input(body, local, &sources);
             }
 
-        
             eprintln!("\nUser Locals:");
-            for local  in body.vars_and_temps_iter() {
+            for local in body.vars_and_temps_iter() {
                 if body.local_decls[local].is_user_variable() {
                     let ty = body.local_decls[local].ty;
                     eprintln!("  {:?}: {}", local, ty);
@@ -59,7 +56,6 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
             eprintln!("\nCalls:");
             print_calls(tcx, body);
         });
-        
     }
 
     fn is_required(&self) -> bool {
@@ -70,20 +66,12 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
 enum PointerSource<'tcx> {
     InputRef(Local),
     InputRaw(Local),
-    Place {
-        root: Place<'tcx>,
-        via: &'static str,
-    },
-    AliasOf {
-        root: Local,
-        via: &'static str,
-    },
+    Place { root: Place<'tcx>, via: &'static str },
+    AliasOf { root: Local, via: &'static str },
     Unknown,
 }
 
 fn _print_calls_to_protected_functions<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
-    
-
     for (_bb_idx, bb_data) in body.basic_blocks.iter_enumerated() {
         let Some(terminator) = &bb_data.terminator else {
             continue;
@@ -126,10 +114,7 @@ fn format_span(tcx: TyCtxt<'_>, span: rustc_span::Span) -> String {
 
     let source_map = tcx.sess.source_map();
 
-    let file = source_map
-        .span_to_filename(span)
-        .prefer_local_unconditionally()
-        .to_string();
+    let file = source_map.span_to_filename(span).prefer_local_unconditionally().to_string();
 
     let line = source_map.lookup_char_pos(span.lo()).line;
 
@@ -152,7 +137,7 @@ fn _print_call_arg_with_source<'tcx>(
     let ty = place.ty(body, tcx).ty;
 
     if matches!(ty.kind(), ty::Ref(..) | ty::RawPtr(..)) {
-        eprintln!("\ttype: {}", ty,);
+        eprintln!("\ttype: {}", ty);
 
         if place.projection.is_empty() {
             match sources.get(&place.local) {
@@ -187,7 +172,7 @@ fn build_pointer_sources<'tcx>(body: &Body<'tcx>) -> FxIndexMap<Local, PointerSo
             let StatementKind::Assign(box (lhs, rhs)) = &stmt.kind else {
                 continue;
             };
-            
+
             if !lhs.projection.is_empty() {
                 continue;
             }
@@ -201,36 +186,20 @@ fn build_pointer_sources<'tcx>(body: &Body<'tcx>) -> FxIndexMap<Local, PointerSo
             match rhs {
                 // x = &y
                 Rvalue::Ref(_, _, place) => {
-                    sources.insert(
-                        lhs.local,
-                        PointerSource::Place {
-                            root: *place,
-                            via: "ref",
-                        },
-                    );
+                    sources.insert(lhs.local, PointerSource::Place { root: *place, via: "ref" });
                 }
 
                 // x = &raw y
                 Rvalue::RawPtr(_, place) => {
-                    sources.insert(
-                        lhs.local,
-                        PointerSource::Place {
-                            root: *place,
-                            via: "&raw",
-                        },
-                    );
+                    sources.insert(lhs.local, PointerSource::Place { root: *place, via: "&raw" });
                 }
 
                 // x = y (copy or move)
-                Rvalue::Use(Operand::Copy(place))
-                | Rvalue::Use(Operand::Move(place)) => {
+                Rvalue::Use(Operand::Copy(place)) | Rvalue::Use(Operand::Move(place)) => {
                     if place.projection.is_empty() {
                         sources.insert(
                             lhs.local,
-                            PointerSource::AliasOf {
-                                root: place.local,
-                                via: "copy/move",
-                            },
+                            PointerSource::AliasOf { root: place.local, via: "copy/move" },
                         );
                     } else {
                         sources.insert(lhs.local, PointerSource::Unknown);
@@ -243,10 +212,7 @@ fn build_pointer_sources<'tcx>(body: &Body<'tcx>) -> FxIndexMap<Local, PointerSo
                         if place.projection.is_empty() {
                             sources.insert(
                                 lhs.local,
-                                PointerSource::AliasOf {
-                                    root: place.local,
-                                    via: "cast",
-                                },
+                                PointerSource::AliasOf { root: place.local, via: "cast" },
                             );
                         } else {
                             sources.insert(lhs.local, PointerSource::Unknown);
@@ -284,30 +250,21 @@ fn print_return<'tcx>(
     }
 }
 
-
-
 fn print_calls<'tcx>(_tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
     for (_bb_idx, bb_data) in body.basic_blocks.iter_enumerated() {
         let Some(terminator) = &bb_data.terminator else {
             continue;
         };
 
-        if let TerminatorKind::Call {
-            func,
-            args,
-            destination,
-            ..
-        } = &terminator.kind
-        {
-
+        if let TerminatorKind::Call { func, args, destination, .. } = &terminator.kind {
             eprintln!("func: {}", format_operand(func));
 
-            eprintln!("\t args:");
+            eprintln!("\targs:");
             for arg in args {
                 eprintln!("\t  {}", format_operand(&arg.node));
             }
 
-            eprintln!("\t dest: {:?}", destination);
+            eprintln!("\tdest: {:?}", destination);
 
             if let Some(def_id) = called_def_id(func) {
                 let category = if def_id.krate == rustc_hir::def_id::LOCAL_CRATE {
@@ -316,7 +273,7 @@ fn print_calls<'tcx>(_tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
                     "external_crate"
                 };
 
-                eprintln!("\t category: {}", category);
+                eprintln!("\tcategory: {}", category);
             }
         }
     }
@@ -360,7 +317,6 @@ fn print_input<'tcx>(
         }
     }
 }
-
 
 fn print_pointer_aliases<'tcx>(
     body: &Body<'tcx>,
