@@ -3,10 +3,11 @@
 use rustc_data_structures::fx::{FxHashSet, FxIndexMap};
 use rustc_hir::find_attr;
 use rustc_middle::mir::{
-    Body, Local, LocalKind, Operand, Place, RETURN_PLACE, Rvalue, StatementKind, TerminatorKind,
+    Body, Local, LocalKind, Operand, Place, RETURN_PLACE, Rvalue, StatementKind, TerminatorKind
 };
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, TyCtxt};
+use rustc_middle::mir::{BasicBlock, Terminator, BasicBlockData};
 
 pub(super) struct RadProtectedAnalysis;
 
@@ -17,6 +18,9 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
 
     fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
         let def_id = body.source.def_id();
+
+        let protected_blocks = get_protected_blocks(tcx, body);
+        triplicate_protected_calls(body, protected_blocks);
 
         // print_calls_to_protected_functions(tcx, body);
 
@@ -418,6 +422,65 @@ fn resolve_pointer_source<'tcx>(
 
             Some(PointerSource::Unknown) | None => {
                 return "unknown".to_string();
+            }
+        }
+    }
+}
+
+// Get basic blocks that have a rad protected terminator
+fn get_protected_blocks<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) -> Vec<BasicBlock> {
+    let mut protected_blocks = Vec::new();
+
+    for (bb_idx, bb_data) in body.basic_blocks.iter_enumerated() {
+        if let Some(terminator) = &bb_data.terminator {
+            if let TerminatorKind::Call { func, .. } = &terminator.kind {
+                if let Some(callee_def_id) = called_def_id(func) {
+                    if find_attr!(tcx, callee_def_id, RadProtected(_)) {
+                        protected_blocks.push(bb_idx);
+                    }
+                }
+            }
+        }
+    }
+
+    protected_blocks
+}
+
+// Given a list of rad protected basic blocks, triplicate the callsites
+fn triplicate_protected_calls<'tcx>(body: &mut Body<'tcx>, protected_blocks: Vec<BasicBlock>) {
+
+    // Helper to create a duplicated call block given the original terminator and its target
+    fn create_duplicated_call_block<'tcx>(call_1_terminator: &Terminator<'tcx>, new_target: BasicBlock) -> BasicBlockData<'tcx> {
+        let mut duplicated_terminator: rustc_middle::mir::Terminator<'_> = call_1_terminator.clone();
+        
+        if let TerminatorKind::Call { target, .. } = &mut duplicated_terminator.kind {
+            *target = Some(new_target);
+        }
+        
+        BasicBlockData::new(Some(duplicated_terminator), false)
+    }
+    
+    for bb_idx in protected_blocks.into_iter() {
+        
+        let call_1_target = match &body.basic_blocks[bb_idx].terminator().kind {
+            TerminatorKind::Call { target: Some(t), .. } => *t,
+            _ => continue, 
+        };
+
+        let call_1_terminator = body.basic_blocks[bb_idx].terminator().clone();
+
+        // Add call 3, where its target is call 1's target
+        let bb3_data = create_duplicated_call_block(&call_1_terminator, call_1_target);
+        let bb3 = body.basic_blocks_mut().push(bb3_data);
+
+        // Add call 2, where its target is call 3
+        let bb2_data = create_duplicated_call_block(&call_1_terminator, bb3);
+        let bb2 = body.basic_blocks_mut().push(bb2_data);
+
+        // Change call 1's target to call 2
+        if let Some(terminator) = &mut body.basic_blocks_mut()[bb_idx].terminator {
+            if let TerminatorKind::Call { target, .. } = &mut terminator.kind {
+                *target = Some(bb2);
             }
         }
     }
