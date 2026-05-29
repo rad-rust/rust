@@ -166,3 +166,6 @@ pub use crate::macros::builtin::{eii, unsafe_eii};
 
 #[unstable(feature = "eii_internals", issue = "none")]
 pub use crate::macros::builtin::eii_declaration;
+
+#[stable(feature = "rad_protected_builtin_macro", since = "1.95.0")]
+pub use crate::macros::builtin::rad_protected;

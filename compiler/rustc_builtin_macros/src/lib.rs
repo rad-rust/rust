@@ -45,6 +45,7 @@ mod global_allocator;
 mod iter;
 mod log_syntax;
 mod pattern_type;
+mod rad_protected;
 mod source_util;
 mod test;
 mod trace_macros;
@@ -118,6 +119,7 @@ pub fn register_builtin_macros(resolver: &mut dyn ResolverExpand) {
         eii_declaration: eii::eii_declaration,
         eii_shared_macro: eii::eii_shared_macro,
         global_allocator: global_allocator::expand,
+        rad_protected: rad_protected::triplicate,
         test: test::expand_test,
         test_case: test::expand_test_case,
         unsafe_eii: eii::unsafe_eii,
