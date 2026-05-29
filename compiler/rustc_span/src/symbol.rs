@@ -1591,6 +1591,7 @@ symbols! {
         question_mark,
         quote,
         rad_protected,
+        rad_protected_mir,
         range_inclusive_new,
         raw_dash_dylib: "raw-dylib",
         raw_dylib,
