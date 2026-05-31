@@ -64,10 +64,8 @@ pub(crate) fn triplicate(
         }
     }).collect();
 
-    let make_call_stmt = |suffix_num: usize| {
-        let call = cx.expr_call_ident(span, make_ident(suffix_num), call_args.clone());
-
-        cx.stmt_semi(call)
+    let make_call_expr = |suffix_num: usize| {
+        cx.expr_call_ident(span, make_ident(suffix_num), call_args.clone())
     };
 
     const NUM_DUPLICATES: usize = 3;
@@ -75,11 +73,27 @@ pub(crate) fn triplicate(
     let mut wrapper_stmts: ThinVec<ast::Stmt> = thin_vec![];
     
     wrapper_stmts.extend((1..=NUM_DUPLICATES).map(make_inner_fn_stmt));
-    wrapper_stmts.extend((1..=NUM_DUPLICATES).map(make_call_stmt));
+
+    let vote_path = cx.path_global(
+        span,
+        vec![
+            Ident::new(sym::std, span), 
+            Ident::new(sym::rad_protected, span), 
+            Ident::from_str_and_span("vote", span)
+        ],
+    );
+
+    let vote_args: ThinVec<_> = (1..=NUM_DUPLICATES).map(make_call_expr).collect();
+
+    let vote_expr = cx.expr_path(vote_path);
+    let vote_call = cx.expr_call(span, vote_expr, vote_args);
+    let vote_stmt = cx.stmt_expr(vote_call);
+
+    wrapper_stmts.push(vote_stmt);
 
     let wrapper_body = cx.block(span, wrapper_stmts);
 
-    let mut wrapper_fn = ast::Fn {
+    let wrapper_fn = ast::Fn {
         defaultness: func.defaultness,
         ident: func.ident,
         sig: func.sig.clone(),
@@ -89,9 +103,6 @@ pub(crate) fn triplicate(
         define_opaque: func.define_opaque.clone(),
         eii_impls: func.eii_impls.clone()
     };
-
-    // The return type is temporarily the unit type until voting is implemented
-    wrapper_fn.sig.decl.output = ast::FnRetTy::Default(span);
 
     let mir_attr = cx.attr_word(sym::rad_protected_mir, span);
     

@@ -611,6 +611,10 @@ pub mod random;
 pub mod sync;
 pub mod time;
 
+
+#[stable(feature = "rad_protected", since = "1.95.0")]
+pub mod rad_protected;
+
 // Pull in `std_float` crate  into std. The contents of
 // `std_float` are in a different repository: rust-lang/portable-simd.
 #[path = "../../portable-simd/crates/std_float/src/lib.rs"]
