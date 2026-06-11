@@ -2,11 +2,12 @@ use rustc_ast as ast;
 use rustc_expand::base::{Annotatable, ExtCtxt};
 use rustc_span::{Span, symbol::Ident, sym};
 use thin_vec::{thin_vec, ThinVec};
+use rustc_ast::MetaItemInner;
 
 pub(crate) fn triplicate(
     cx: &mut ExtCtxt<'_>,
     span: Span,
-    _meta_item: &ast::MetaItem,
+    meta_item: &ast::MetaItem,
     item: Annotatable,
 ) -> Vec<Annotatable> {
 
@@ -24,6 +25,15 @@ pub(crate) fn triplicate(
         None => {
             cx.dcx().span_err(span, "`#[rad_protected]` can only be applied to functions with a body");
             return vec![item];
+        }
+    };
+
+    let attr_opts: ThinVec<MetaItemInner> = match meta_item.kind {
+        ast::MetaItemKind::List(ref vec) => vec.clone(),
+        ast::MetaItemKind::Word => thin_vec![],
+        _ => {
+            cx.dcx().span_err(meta_item.span, "unsupported options kind in `#[rad_protected]`");
+            thin_vec![]
         }
     };
 
@@ -64,15 +74,28 @@ pub(crate) fn triplicate(
         }
     }).collect();
 
+    let mut triplicate_body = true;
+
+    for opt in attr_opts {
+        match opt {
+            MetaItemInner::MetaItem(opt) if opt.has_name(sym::no_triplicate_body) => {
+                triplicate_body = false;
+            }
+            _ => {
+                cx.dcx().span_err(meta_item.span, "unsupported option in `#[rad_protected]`");
+            }
+        }
+    }
+
     let make_call_expr = |suffix_num: usize| {
-        cx.expr_call_ident(span, make_ident(suffix_num), call_args.clone())
+        cx.expr_call_ident(span, make_ident(if triplicate_body { suffix_num } else { 1 }), call_args.clone())
     };
 
     const NUM_DUPLICATES: usize = 3;
 
     let mut wrapper_stmts: ThinVec<ast::Stmt> = thin_vec![];
     
-    wrapper_stmts.extend((1..=NUM_DUPLICATES).map(make_inner_fn_stmt));
+    wrapper_stmts.extend((1..=if triplicate_body { NUM_DUPLICATES } else { 1 }).map(make_inner_fn_stmt));
 
     let vote_path = cx.path_global(
         span,

@@ -1592,6 +1592,7 @@ symbols! {
         quote,
         rad_protected,
         rad_protected_mir,
+        no_triplicate_body,
         range_inclusive_new,
         raw_dash_dylib: "raw-dylib",
         raw_dylib,
