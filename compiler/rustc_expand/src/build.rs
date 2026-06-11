@@ -769,6 +769,21 @@ impl<'a> ExtCtxt<'a> {
         )
     }
 
+    // Builds `#[unsafe(name = val)]`.
+    //
+    // Note: `span` is used for both the identifier and the value.
+    pub fn attr_name_value_str_unsafe(&self, name: Symbol, val: Symbol, span: Span) -> ast::Attribute {
+        let g = &self.sess.psess.attr_id_generator;
+        attr::mk_attr_name_value_str(
+            g,
+            ast::AttrStyle::Outer,
+            ast::Safety::Unsafe(span),
+            name,
+            val,
+            span,
+        )
+    }
+
     // Builds `#[outer(inner)]`.
     pub fn attr_nested_word(&self, outer: Symbol, inner: Symbol, span: Span) -> ast::Attribute {
         let g = &self.sess.psess.attr_id_generator;

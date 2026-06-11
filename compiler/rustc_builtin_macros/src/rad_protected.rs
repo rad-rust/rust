@@ -1,6 +1,6 @@
 use rustc_ast as ast;
 use rustc_expand::base::{Annotatable, ExtCtxt};
-use rustc_span::{Span, symbol::Ident, sym};
+use rustc_span::{Span, symbol::Ident, sym, Symbol};
 use thin_vec::{thin_vec, ThinVec};
 use rustc_ast::MetaItemInner;
 
@@ -36,6 +36,19 @@ pub(crate) fn triplicate(
             thin_vec![]
         }
     };
+    
+    let mut triplicate_body = true;
+
+    for opt in attr_opts {
+        match opt {
+            MetaItemInner::MetaItem(opt) if opt.has_name(sym::no_triplicate_body) => {
+                triplicate_body = false;
+            }
+            _ => {
+                cx.dcx().span_err(meta_item.span, "unsupported option in `#[rad_protected]`");
+            }
+        }
+    }
 
     let make_ident = |suffix_num: usize| {
         Ident::from_str_and_span(
@@ -57,7 +70,21 @@ pub(crate) fn triplicate(
             eii_impls: thin_vec![]
         };
 
-        let item = cx.item(span, ast::AttrVec::new(), ast::ItemKind::Fn(Box::new(inner_fn)));
+        let inner_attrs = 
+            if triplicate_body {
+                let inline_attr = cx.attr_nested_word(sym::inline, sym::never, span);
+                let link_section_attr = cx.attr_name_value_str_unsafe(
+                    sym::link_section, 
+                    Symbol::intern(&format!(".text.{}_{}", func.ident.name, suffix_num)), 
+                    span
+                );
+                thin_vec![inline_attr, link_section_attr]
+                
+            } else {
+                thin_vec![]
+            };
+
+        let item = cx.item(span, inner_attrs, ast::ItemKind::Fn(Box::new(inner_fn)));
         cx.stmt_item(span, item)
     };
 
@@ -74,18 +101,6 @@ pub(crate) fn triplicate(
         }
     }).collect();
 
-    let mut triplicate_body = true;
-
-    for opt in attr_opts {
-        match opt {
-            MetaItemInner::MetaItem(opt) if opt.has_name(sym::no_triplicate_body) => {
-                triplicate_body = false;
-            }
-            _ => {
-                cx.dcx().span_err(meta_item.span, "unsupported option in `#[rad_protected]`");
-            }
-        }
-    }
 
     let make_call_expr = |suffix_num: usize| {
         cx.expr_call_ident(span, make_ident(if triplicate_body { suffix_num } else { 1 }), call_args.clone())
