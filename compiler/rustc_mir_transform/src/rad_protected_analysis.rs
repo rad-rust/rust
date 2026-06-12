@@ -138,14 +138,15 @@ enum CalleeTarget {
 struct CallSiteSummary {
     callee: CalleeTarget,
     args: Vec<CallArg>,
-    _destination: Local,
-    _span_label: String,
+    destination: Local,
+    span_label: String,
 }
 
 #[derive(Clone, Debug)]
 struct CallArg {
     local: Option<Local>,
     constant: bool,
+    is_move: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -242,12 +243,15 @@ fn build_local_summary<'tcx>(tcx: TyCtxt<'tcx>, body: &'tcx Body<'tcx>) -> Local
                 .iter()
                 .map(|arg| match &arg.node {
                     Operand::Constant(_) | Operand::RuntimeChecks(_) => {
-                        CallArg { local: None, constant: true }
+                        CallArg { local: None, constant: true, is_move: false }
                     }
-                    Operand::Copy(place) | Operand::Move(place) if place.projection.is_empty() => {
-                        CallArg { local: Some(place.local), constant: false }
+                    Operand::Copy(place) if place.projection.is_empty() => {
+                        CallArg { local: Some(place.local), constant: false, is_move: false }
                     }
-                    _ => CallArg { local: None, constant: false },
+                    Operand::Move(place) if place.projection.is_empty() => {
+                        CallArg { local: Some(place.local), constant: false, is_move: true }
+                    }
+                    _ => CallArg { local: None, constant: false, is_move: false },
                 })
                 .collect();
 
@@ -255,8 +259,8 @@ fn build_local_summary<'tcx>(tcx: TyCtxt<'tcx>, body: &'tcx Body<'tcx>) -> Local
             callsites.push(CallSiteSummary {
                 callee,
                 args: call_args,
-                _destination: destination.local,
-                _span_label: format_span(tcx, terminator.source_info.span),
+                destination: destination.local,
+                span_label: format_span(tcx, terminator.source_info.span),
             });
 
             if destination.projection.is_empty() {
@@ -435,7 +439,7 @@ fn build_interproc_graph<'tcx>(
                         let callee_key = (*callee, *callee_local);
                         let source = match callsite.args.get(arg_idx) {
                             Some(CallArg { constant: true, .. }) => FlowSource::Constant,
-                            Some(CallArg { local: Some(actual), constant: false }) => {
+                            Some(CallArg { local: Some(actual), constant: false, .. }) => {
                                 resolve_actual_flow(
                                     tcx,
                                     caller,
@@ -489,79 +493,11 @@ fn sorted_unique_children(
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 struct InputEntry<'tcx> {
     ty: Ty<'tcx>,
     source: FlowSource,
     absolute_source: FlowSource,
-}
-
-fn input_entries_for_fn<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    def_id: DefId,
-    inputs: &FxIndexMap<ArgKey, InputEntry<'tcx>>,
-) -> Vec<(Local, InputEntry<'tcx>)> {
-    if is_local_body(def_id) {
-        let mut v: Vec<_> = inputs
-            .iter()
-            .filter(|((f, _), _)| *f == def_id)
-            .map(|((_, local), entry)| (*local, entry.clone()))
-            .collect();
-        v.sort_by_key(|(local, _)| local.index());
-        v
-    } else {
-        let sig = tcx.fn_sig(def_id).instantiate_identity().skip_binder();
-        sig.inputs()
-            .iter()
-            .enumerate()
-            .map(|(i, ty)| {
-                let local = Local::from_usize(i + 1);
-                (
-                    local,
-                    InputEntry {
-                        ty: *ty,
-                        source: FlowSource::Unknown,
-                        absolute_source: FlowSource::Unknown,
-                    },
-                )
-            })
-            .collect()
-    }
-}
-
-fn print_inputs_in_call_tree<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    def_id: DefId,
-    report: &ProtectedReport<'tcx>,
-    visited: &mut FxHashSet<DefId>,
-    needs_gap: &mut bool,
-) {
-    if is_local_body(def_id) && !visited.insert(def_id) {
-        return;
-    }
-
-    let entries = input_entries_for_fn(tcx, def_id, &report.inputs);
-    if !entries.is_empty() {
-        if *needs_gap {
-            eprintln!();
-        }
-        *needs_gap = true;
-
-        for (local, entry) in entries {
-            let label = format_fn_local(tcx, def_id, local);
-            eprintln!("  {label}: {}", entry.ty);
-            if is_pointer_like(entry.ty) {
-                eprintln!("    source: {}", format_flow_source(tcx, &entry.source));
-                eprintln!(
-                    "    absolute_source: {}",
-                    format_flow_source(tcx, &entry.absolute_source)
-                );
-            }
-        }
-    }
-
-    for kid in sorted_unique_children(&report.children, def_id) {
-        print_inputs_in_call_tree(tcx, kid, report, visited, needs_gap);
-    }
 }
 
 fn resolve_actual_flow(
@@ -696,6 +632,7 @@ fn provenance_to_flow(
     }
 }
 
+#[allow(dead_code)]
 struct OutputEntry<'tcx> {
     ty: Ty<'tcx>,
     source: FlowSource,
@@ -712,7 +649,10 @@ struct ProtectedReport<'tcx> {
     root: DefId,
     reached: Vec<DefId>,
     children: FxHashMap<DefId, Vec<DefId>>,
+    summaries: FxHashMap<DefId, LocalMirSummary<'tcx>>,
+    #[allow(dead_code)]
     inputs: FxIndexMap<ArgKey, InputEntry<'tcx>>,
+    #[allow(dead_code)]
     outputs: FxIndexMap<ArgKey, OutputEntry<'tcx>>,
     #[allow(dead_code)]
     duplication: DuplicationPlan,
@@ -771,10 +711,27 @@ fn build_report<'tcx>(
     let duplication =
         DuplicationPlan { duplicate: Vec::new(), source_track: Vec::new(), compare: Vec::new() };
 
+    let mut summaries = FxHashMap::default();
+    for func in graph.reached.clone() {
+        if !is_local_body(func) {
+            continue;
+        }
+        let summary = if func == root {
+            root_summary.clone()
+        } else if let Some(summary) = SummaryCache::get_or_build(tcx, func, root, &mut graph.warnings)
+        {
+            summary
+        } else {
+            continue;
+        };
+        summaries.insert(func, summary);
+    }
+
     ProtectedReport {
         root,
         reached: graph.reached,
         children: graph.children,
+        summaries,
         inputs,
         outputs,
         duplication,
@@ -886,9 +843,12 @@ fn is_pointer_like(ty: Ty<'_>) -> bool {
 
 fn print_report<'tcx>(tcx: TyCtxt<'tcx>, report: &ProtectedReport<'tcx>) {
     eprintln!("\n=== Protected Function Analysis ===");
-    eprintln!("Protected root: {}", tcx.def_path_str(report.root));
+    eprintln!();
+    eprintln!("Protected root:");
+    eprintln!("  {}", tcx.def_path_str(report.root));
 
-    eprintln!("\nReached functions:");
+    eprintln!();
+    eprintln!("Reached functions:");
     for func in &report.reached {
         let label = tcx.def_path_str(*func);
         if is_local_body(*func) {
@@ -898,59 +858,70 @@ fn print_report<'tcx>(tcx: TyCtxt<'tcx>, report: &ProtectedReport<'tcx>) {
         }
     }
 
-    eprintln!("\nCall tree:");
+    eprintln!();
+    eprintln!("Call tree:");
     let mut print_visited = FxHashSet::default();
     print_call_tree(tcx, report.root, &report.children, 0, &mut print_visited);
 
-    eprintln!("\nInputs:");
-    let mut inputs_visited = FxHashSet::default();
-    let mut inputs_needs_gap = false;
-    print_inputs_in_call_tree(tcx, report.root, report, &mut inputs_visited, &mut inputs_needs_gap);
-
-    eprintln!("\nOutputs:");
+    eprintln!();
+    eprintln!("Function summaries:");
     for func in &report.reached {
-        let key = (*func, RETURN_PLACE);
-        let Some(entry) = report.outputs.get(&key) else {
+        let Some(summary) = report.summaries.get(func) else {
             continue;
         };
-        eprintln!("  {}: {}", format_fn_local(tcx, *func, RETURN_PLACE), entry.ty);
-        eprintln!("    source: {}", format_flow_source(tcx, &entry.source));
+        print_function_summary(tcx, *func, summary);
     }
 
-    /*
-    eprintln!("\nDuplication plan:");
-    eprintln!("  duplicate:");
-    if report.duplication.duplicate.is_empty() {
-        eprintln!("    none");
-    } else {
-        for item in &report.duplication.duplicate {
-            eprintln!("    - {}", item);
-        }
-    }
-    eprintln!("  source-track:");
-    if report.duplication.source_track.is_empty() {
-        eprintln!("    none");
-    } else {
-        for item in &report.duplication.source_track {
-            eprintln!("    - {}", item);
-        }
-    }
-    eprintln!("  compare:");
-    if report.duplication.compare.is_empty() {
-        eprintln!("    none");
-    } else {
-        for item in &report.duplication.compare {
-            eprintln!("    - {}", item);
-        }
-    }
-    */
-
-    eprintln!("\nWarnings:");
+    eprintln!();
+    eprintln!("Warnings:");
     if report.warnings.is_empty() {
         eprintln!("  none");
     } else {
         for warning in &report.warnings {
             eprintln!("  - {}", warning);
+        }
+    }
+}
+
+fn print_function_summary<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def_id: DefId,
+    summary: &LocalMirSummary<'tcx>,
+) {
+    eprintln!();
+    eprintln!("  {}", tcx.def_path_str(def_id));
+
+    eprintln!("    formal inputs:");
+    if summary.formal_args.is_empty() {
+        eprintln!("      none");
+    } else {
+        for (local, ty) in &summary.formal_args {
+            eprintln!("      {}: {}", format_local(*local), ty);
+        }
+    }
+
+    eprintln!();
+    eprintln!("    return:");
+    eprintln!("      {}: {}", format_local(RETURN_PLACE), summary.return_ty);
+
+    eprintln!();
+    eprintln!("    callsites:");
+    if summary.callsites.is_empty() {
+        eprintln!("      none");
+    } else {
+        for (idx, callsite) in summary.callsites.iter().enumerate() {
+            eprintln!("      [{idx}] {}", format_callee_name(tcx, &callsite.callee));
+            eprintln!("        kind: {}", format_callee_kind(&callsite.callee));
+            eprintln!("        at: {}", callsite.span_label);
+            eprintln!("        args:");
+            if callsite.args.is_empty() {
+                eprintln!("          none");
+            } else {
+                for (arg_idx, arg) in callsite.args.iter().enumerate() {
+                    eprintln!("          arg{arg_idx}: {}", format_call_arg(arg));
+                }
+            }
+            eprintln!("        destination: {}", format_local(callsite.destination));
         }
     }
 }
@@ -991,10 +962,43 @@ fn print_call_tree(
     }
 }
 
+fn format_local(local: Local) -> String {
+    format!("_{}", local.index())
+}
+
 fn format_fn_local(tcx: TyCtxt<'_>, def_id: DefId, local: Local) -> String {
     format!("{}._{}", tcx.def_path_str(def_id), local.index())
 }
 
+fn format_callee_name(tcx: TyCtxt<'_>, callee: &CalleeTarget) -> String {
+    match callee {
+        CalleeTarget::Direct(def_id) | CalleeTarget::ExternalDirect(def_id) => {
+            tcx.def_path_str(*def_id)
+        }
+        CalleeTarget::Indirect => "<indirect>".to_string(),
+    }
+}
+
+fn format_callee_kind(callee: &CalleeTarget) -> &'static str {
+    match callee {
+        CalleeTarget::Direct(_) => "local",
+        CalleeTarget::ExternalDirect(_) => "external",
+        CalleeTarget::Indirect => "indirect",
+    }
+}
+
+fn format_call_arg(arg: &CallArg) -> String {
+    if arg.constant {
+        "constant".to_string()
+    } else if let Some(local) = arg.local {
+        let op = if arg.is_move { "move" } else { "copy" };
+        format!("{op} {}", format_local(local))
+    } else {
+        "unknown".to_string()
+    }
+}
+
+#[allow(dead_code)]
 fn format_flow_source(tcx: TyCtxt<'_>, source: &FlowSource) -> String {
     match source {
         FlowSource::ProtectedArg(index) => format!("protected_arg({index})"),
