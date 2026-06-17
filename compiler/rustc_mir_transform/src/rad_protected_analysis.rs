@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap};
 use rustc_hir::def_id::{DefId, LOCAL_CRATE};
 use rustc_hir::find_attr;
+use rustc_hir::{Node, TraitFn, TraitItemKind};
 use rustc_middle::mir::{
     Body, Local, Operand, RETURN_PLACE, Rvalue, StatementKind, TerminatorKind,
 };
@@ -354,6 +355,15 @@ fn try_get_mir<'tcx>(
             | rustc_hir::def::DefKind::Closure
             | rustc_hir::def::DefKind::InlineConst
     ) {
+        return None;
+    }
+    let hir_id = tcx.local_def_id_to_hir_id(local);
+    if let Node::TraitItem(item) = tcx.hir_node(hir_id) {
+        if matches!(item.kind, TraitItemKind::Fn(_, TraitFn::Required(_))) {
+            return None;
+        }
+    }
+    if !tcx.mir_keys(()).contains(&local) {
         return None;
     }
     Some(tcx.optimized_mir(local))
