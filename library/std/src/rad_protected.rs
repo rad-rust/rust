@@ -27,3 +27,29 @@ pub fn vote<T: Sized>(a: T, b: T, c: T) -> T {
 
     a
 }
+
+
+/// Contains the logic for rad_protected multithreading
+/// All valid rad_protected `Multithreading` types must implement this trait
+#[stable(feature = "rad_protected", since = "1.95.0")]
+pub trait Multithreading {
+
+    /// Run the triplicated functions on new threads
+    #[stable(feature = "rad_protected", since = "1.95.0")]
+    fn run_triple<T, F1, F2, F3>(f1: F1, f2: F2, f3: F3) -> T
+        where
+            F1: FnOnce() -> T + Send + 'static,
+            F2: FnOnce() -> T + Send + 'static,
+            F3: FnOnce() -> T + Send + 'static,
+            T: Send + 'static;
+
+    /// Synchronizes the threads at the start of the critical section
+    /// Returns `true` for the leader thread, and `false` for the non-leaders
+    /// The non-leaders continue, waiting at `exit_critical_section`
+    #[stable(feature = "rad_protected", since = "1.95.0")]
+    fn enter_critical_section(&self) -> bool;
+
+    /// Non-leader threads wait here for the leader to complete the critical section
+    #[stable(feature = "rad_protected", since = "1.95.0")]
+    fn exit_critical_section(&self);
+}
