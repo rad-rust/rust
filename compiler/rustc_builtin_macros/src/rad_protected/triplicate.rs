@@ -3,6 +3,7 @@ use rustc_expand::base::{Annotatable, ExtCtxt};
 use rustc_span::{Span, symbol::Ident, sym, Symbol, DUMMY_SP};
 use thin_vec::{thin_vec, ThinVec};
 use rustc_ast::{MetaItemInner, FnSig};
+use crate::rad_protected::patch_unsafe::patch_unsafe_blocks;
 
 pub(crate) fn triplicate(
     cx: &mut ExtCtxt<'_>,
@@ -20,13 +21,15 @@ pub(crate) fn triplicate(
         return vec![item];
     };
 
-    let func_body = match &func.body {
-        Some(b) => b,
+    let mut func_body = match &func.body {
+        Some(b) => b.clone(),
         None => {
             cx.dcx().span_err(span, "`#[rad_protected]` can only be applied to functions with a body");
             return vec![item];
         }
     };
+
+    patch_unsafe_blocks(cx, &mut func_body);
 
     let attr_opts: ThinVec<MetaItemInner> = match meta_item.kind {
         ast::MetaItemKind::List(ref vec) => vec.clone(),
