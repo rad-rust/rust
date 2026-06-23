@@ -28,5 +28,33 @@ impl MutVisitor for UnsafeBlockRewriter<'_, '_> {
 }
 
 fn patch_unsafe_block(cx: &ExtCtxt<'_>, block: &mut ast::Block) {
-    todo!();
+
+    let multithreading_method_call = |name: &str| {
+        let multithreading_ident = Ident::from_str_and_span("multithreading", DUMMY_SP);
+        let method_name_ident = Ident::from_str_and_span(name, DUMMY_SP);
+
+        cx.expr_method_call(
+            DUMMY_SP,
+            cx.expr_ident(DUMMY_SP, multithreading_ident),
+            method_name_ident,
+            thin_vec![],
+        )
+    };
+
+    let enter_call = multithreading_method_call("enter_critical_section");
+    let exit_call = multithreading_method_call("exit_critical_section");
+
+    let if_stmt = cx.stmt_expr(cx.expr_if(
+        DUMMY_SP,
+        enter_call,
+        cx.expr_block(cx.block(block.span, block.stmts.clone())),
+        None,
+    ));
+    
+    let exit_call_stmt = cx.stmt_expr(exit_call);
+
+    block.stmts = thin_vec![
+        if_stmt,
+        exit_call_stmt
+    ];
 }
