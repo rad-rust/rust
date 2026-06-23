@@ -52,22 +52,15 @@ pub(crate) fn triplicate(
             }
         }
     }
-
-    let make_ident = |suffix_num: usize| {
-        Ident::from_str_and_span(
-            &format!("__{}_{}", func.ident.name, suffix_num), 
-            span
-        )
-    };
     
     let make_inner_fn_stmt = |suffix_num: usize| {
 
         let mut sig = func.sig.clone();
-        add_mutex_param(&mut sig);
+        add_mutex_param(cx, &mut sig);
 
         let inner_fn = ast::Fn {
             defaultness: ast::Defaultness::Implicit,
-            ident: make_ident(suffix_num),
+            ident: inner_fn_ident(func.ident.name, suffix_num),
             generics: func.generics.clone(),
             sig,
             contract: None,
@@ -78,11 +71,11 @@ pub(crate) fn triplicate(
 
         let inner_attrs = 
             if triplicate_body {
-                let inline_attr = cx.attr_nested_word(sym::inline, sym::never, span);
+                let inline_attr = cx.attr_nested_word(sym::inline, sym::never, DUMMY_SP);
                 let link_section_attr = cx.attr_name_value_str_unsafe(
                     sym::link_section, 
                     Symbol::intern(&format!(".text.{}_{}", func.ident.name, suffix_num)), 
-                    span
+                    DUMMY_SP
                 );
                 thin_vec![inline_attr, link_section_attr]
                 
@@ -90,13 +83,16 @@ pub(crate) fn triplicate(
                 thin_vec![]
             };
 
-        let item = cx.item(span, inner_attrs, ast::ItemKind::Fn(Box::new(inner_fn)));
-        cx.stmt_item(span, item)
+        cx.stmt_item(DUMMY_SP, cx.item(
+            DUMMY_SP, 
+            inner_attrs, 
+            ast::ItemKind::Fn(Box::new(inner_fn))
+        ))
     };
 
     let call_args: ThinVec<_> = func.sig.decl.inputs.iter().filter_map(|param| {
         match &param.pat.kind {
-            ast::PatKind::Ident(_, ident, _) => Some(cx.expr_ident(span, *ident)),
+            ast::PatKind::Ident(_, ident, _) => Some(cx.expr_ident(param.pat.span, *ident)),
             _ => {
                 cx.dcx().span_err(
                     param.pat.span, 
@@ -107,41 +103,40 @@ pub(crate) fn triplicate(
         }
     }).collect();
 
-
-let make_call_expr = |suffix_num: usize| {
-        let fn_ident = make_ident(if triplicate_body { suffix_num } else { 1 });
+    let make_call_expr = |suffix_num: usize| {
+        let fn_ident = inner_fn_ident(func.ident.name, if triplicate_body { suffix_num } else { 1 });
 
         let multithreading_clone_expr = cx.expr_method_call(
-            span,
-            cx.expr_ident(span, Ident::from_str_and_span("multithreading", span)),
-            Ident::new(sym::clone, span),
+            DUMMY_SP,
+            cx.expr_ident(DUMMY_SP, multithreading_ident()),
+            Ident::new(sym::clone, DUMMY_SP),
             thin_vec![],
         );
 
-        let m_ident = Ident::from_str_and_span("m", span);
+        let m_ident = Ident::from_str_and_span("m", DUMMY_SP);
         let local_stmt = cx.stmt_let(
-            span,
+            DUMMY_SP,
             false,
             m_ident,
             multithreading_clone_expr,
         );
 
         let mut call_args = call_args.clone();
-        call_args.push(cx.expr_ident(span, m_ident));
+        call_args.push(cx.expr_ident(DUMMY_SP, m_ident));
 
-        let call = cx.expr_call_ident(span, fn_ident, call_args);
+        let call = cx.expr_call_ident(DUMMY_SP, fn_ident, call_args);
 
-        let body_block = cx.expr_block(cx.block(span, thin_vec![
+        let body_block = cx.expr_block(cx.block(DUMMY_SP, thin_vec![
             cx.stmt_expr(call)
         ]));
 
-        let mut closure_expr = cx.lambda(span, vec![], body_block);
+        let mut closure_expr = cx.lambda(DUMMY_SP, vec![], body_block);
         
         if let ast::ExprKind::Closure(ref mut closure) = closure_expr.kind {
-            closure.capture_clause = ast::CaptureBy::Value { move_kw: span };
+            closure.capture_clause = ast::CaptureBy::Value { move_kw: DUMMY_SP };
         }
 
-        cx.expr_block(cx.block(span, thin_vec![
+        cx.expr_block(cx.block(DUMMY_SP, thin_vec![
             local_stmt,
             cx.stmt_expr(closure_expr)
         ]))
@@ -150,83 +145,68 @@ let make_call_expr = |suffix_num: usize| {
     const NUM_DUPLICATES: usize = 3;
 
     let mut wrapper_stmts: ThinVec<ast::Stmt> = thin_vec![];
+    
+    wrapper_stmts.extend((1..=if triplicate_body { NUM_DUPLICATES } else { 1 }).map(make_inner_fn_stmt));
 
     let multithreading_use_item = {
-        let path = ast::Path {
-            span,
-            segments: thin_vec![
-                ast::PathSegment::from_ident(Ident::new(sym::std, span)),
-                ast::PathSegment::from_ident(Ident::new(sym::rad_protected, span)),
-                ast::PathSegment::from_ident(Ident::from_str_and_span("Multithreading", span)),
-            ],
-            tokens: None,
-        };
+        let path = cx.path_global(DUMMY_SP, rad_protected_path(vec![
+            Ident::from_str_and_span("Multithreading", DUMMY_SP),
+        ]));
 
         let use_tree = ast::UseTree {
             prefix: path,
             kind: ast::UseTreeKind::Simple(None),
-            span,
+            span: DUMMY_SP,
         };
 
-        let use_item = cx.item(
-            span,
-            ThinVec::new(),
+        cx.stmt_item(DUMMY_SP, cx.item(
+            DUMMY_SP,
+            thin_vec![],
             ast::ItemKind::Use(use_tree),
-        );
-
-        cx.stmt_item(span, use_item)
+        ))
     };
     wrapper_stmts.push(multithreading_use_item);
 
-
-    let multithreading_ident = Ident::from_str_and_span("multithreading", span);
-
-    let multithreading_init = cx.expr_call(
-        span,
-        cx.expr_path(cx.path_global(
-            span,
-            vec![
-                Ident::new(sym::std, span),
-                Ident::new(sym::rad_protected, span),
-                Ident::from_str_and_span("StdMultithreading", span),
-                Ident::new(sym::new, span),
+    let multithreading_init_stmt = {
+        let multithreading_init = cx.expr_call_global(
+            DUMMY_SP,
+            rad_protected_path(vec![
+                multithreading_ty_ident(),
+                Ident::new(sym::new, DUMMY_SP),
+            ]),
+            thin_vec![
+                cx.expr_usize(DUMMY_SP, NUM_DUPLICATES)
             ],
-        )),
-        thin_vec![
-            cx.expr_usize(span, NUM_DUPLICATES)
-        ],
-    );
+        );
 
-    let multithreading_stmt = cx.stmt_let(
-        span,
-        false,
-        multithreading_ident,
-        multithreading_init,
-    );
+        cx.stmt_let(
+            DUMMY_SP,
+            false,
+            multithreading_ident(),
+            multithreading_init,
+        )
+    };
+    wrapper_stmts.push(multithreading_init_stmt);
 
-    wrapper_stmts.push(multithreading_stmt);
-    
-    wrapper_stmts.extend((1..=if triplicate_body { NUM_DUPLICATES } else { 1 }).map(make_inner_fn_stmt));
+    let run_triple_stmt = { 
+        let run_triple_path = cx.path_global(
+            DUMMY_SP,
+            rad_protected_path(vec![
+                multithreading_ty_ident(),
+                Ident::from_str_and_span("run_triple", DUMMY_SP)
+            ]),
+        );
 
-    let run_triple_path = cx.path_global(
-        span,
-        vec![
-            Ident::new(sym::std, span), 
-            Ident::new(sym::rad_protected, span), 
-            Ident::from_str_and_span("StdMultithreading", span),
-            Ident::from_str_and_span("run_triple", span)
-        ],
-    );
+        let run_triple_args: ThinVec<_> = (1..=NUM_DUPLICATES).map(make_call_expr).collect();
 
-    let run_triple_args: ThinVec<_> = (1..=NUM_DUPLICATES).map(make_call_expr).collect();
-
-    let run_triple_expr = cx.expr_path(run_triple_path);
-    let run_triple_call = cx.expr_call(span, run_triple_expr, run_triple_args);
-    let run_triple_stmt = cx.stmt_expr(run_triple_call);
-
+        cx.stmt_expr(cx.expr_call(
+            DUMMY_SP, 
+            cx.expr_path(run_triple_path), run_triple_args
+        ))
+    };
     wrapper_stmts.push(run_triple_stmt);
 
-    let wrapper_body = cx.block(span, wrapper_stmts);
+    let wrapper_body = cx.block(DUMMY_SP, wrapper_stmts);
 
     let wrapper_fn = ast::Fn {
         defaultness: func.defaultness,
@@ -239,61 +219,45 @@ let make_call_expr = |suffix_num: usize| {
         eii_impls: func.eii_impls.clone()
     };
 
-    let mir_attr = cx.attr_word(sym::rad_protected_mir, span);
+    let mir_attr = cx.attr_word(sym::rad_protected_mir, DUMMY_SP);
     
-    let mut wrapper = cx.item(span, thin_vec![mir_attr], ast::ItemKind::Fn(Box::new(wrapper_fn)));
+    let mut wrapper = cx.item(DUMMY_SP, thin_vec![mir_attr], ast::ItemKind::Fn(Box::new(wrapper_fn)));
     wrapper.vis = vis.clone();
 
     vec![Annotatable::Item(wrapper)]
 }
 
-fn add_mutex_param(sig: &mut FnSig) {
-    sig.decl.inputs.push(ast::Param {
-        attrs: Default::default(),
+fn add_mutex_param(cx: &ExtCtxt<'_>, sig: &mut FnSig) {
+    sig.decl.inputs.push(cx.param(
+        DUMMY_SP,
+        multithreading_ident(), 
+        cx.ty_path(cx.path_global(DUMMY_SP, rad_protected_path(vec![
+                multithreading_ty_ident(),
+        ])))
+    ));
+}
 
-        pat: Box::new(ast::Pat {
-            id: ast::DUMMY_NODE_ID,
-            kind: ast::PatKind::Ident(
-                ast::BindingMode::NONE,
-                Ident::from_str_and_span("multithreading", DUMMY_SP),
-                None,
-            ),
-            span: DUMMY_SP,
-            tokens: None,
-        }),
+fn rad_protected_path(tail: Vec<Ident>) -> Vec<Ident> {
+    let mut path = vec![
+        Ident::new(sym::std, DUMMY_SP),
+        Ident::new(sym::rad_protected, DUMMY_SP),
+    ];
 
-        ty: Box::new(ast::Ty {
-            id: ast::DUMMY_NODE_ID,
-            kind: ast::TyKind::Path(
-                None,
-                ast::Path {
-                    span: DUMMY_SP,
-                    segments: thin_vec![
-                        ast::PathSegment {
-                            ident: Ident::new(sym::std, DUMMY_SP), 
-                            id: ast::DUMMY_NODE_ID,
-                            args: None,
-                        },
-                        ast::PathSegment {
-                            ident: Ident::new(sym::rad_protected, DUMMY_SP), 
-                            id: ast::DUMMY_NODE_ID,
-                            args: None,
-                        },
-                        ast::PathSegment {
-                            ident: Ident::from_str_and_span("StdMultithreading", DUMMY_SP),
-                            id: ast::DUMMY_NODE_ID,
-                            args: None,
-                        },
-                    ],
-                    tokens: None,
-                },
-            ),
-            span: DUMMY_SP,
-            tokens: None,
-        }),
+    path.extend(tail);
+    path
+}
 
-        id: ast::DUMMY_NODE_ID,
-        span: DUMMY_SP,
-        is_placeholder: false,
-    });
+fn inner_fn_ident(name: Symbol, suffix_num: usize) -> Ident {
+    Ident::from_str_and_span(
+        &format!("__{}_{}", name, suffix_num), 
+        DUMMY_SP
+    )
+}
+
+fn multithreading_ident() -> Ident {
+    Ident::from_str_and_span("multithreading", DUMMY_SP)
+}
+
+fn multithreading_ty_ident() -> Ident {
+    Ident::from_str_and_span("StdMultithreading", DUMMY_SP)
 }
