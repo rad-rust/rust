@@ -149,7 +149,7 @@ pub(crate) fn triplicate(
     wrapper_stmts.extend((1..=if triplicate_body { NUM_DUPLICATES } else { 1 }).map(make_inner_fn_stmt));
 
     let multithreading_use_item = {
-        let path = cx.path_global(DUMMY_SP, rad_protected_path(vec![
+        let path = cx.path_global(DUMMY_SP, rad_protected_path(false, vec![
             Ident::from_str_and_span("Multithreading", DUMMY_SP),
         ]));
 
@@ -170,8 +170,8 @@ pub(crate) fn triplicate(
     let multithreading_init_stmt = {
         let multithreading_init = cx.expr_call_global(
             DUMMY_SP,
-            rad_protected_path(vec![
-                multithreading_ty_ident(),
+            rad_protected_path(true, vec![
+                multithreading_impl_ty_ident(),
                 Ident::new(sym::new, DUMMY_SP),
             ]),
             thin_vec![
@@ -191,8 +191,8 @@ pub(crate) fn triplicate(
     let run_triple_stmt = { 
         let run_triple_path = cx.path_global(
             DUMMY_SP,
-            rad_protected_path(vec![
-                multithreading_ty_ident(),
+            rad_protected_path(true, vec![
+                multithreading_impl_ty_ident(),
                 Ident::from_str_and_span("run_triple", DUMMY_SP)
             ]),
         );
@@ -231,15 +231,15 @@ fn add_mutex_param(cx: &ExtCtxt<'_>, sig: &mut FnSig) {
     sig.decl.inputs.push(cx.param(
         DUMMY_SP,
         multithreading_ident(), 
-        cx.ty_path(cx.path_global(DUMMY_SP, rad_protected_path(vec![
-                multithreading_ty_ident(),
+        cx.ty_path(cx.path_global(DUMMY_SP, rad_protected_path(true, vec![
+                multithreading_impl_ty_ident(),
         ])))
     ));
 }
 
-fn rad_protected_path(tail: Vec<Ident>) -> Vec<Ident> {
+fn rad_protected_path(_impl_path: bool, tail: Vec<Ident>) -> Vec<Ident> {
     let mut path = vec![
-        Ident::new(sym::std, DUMMY_SP),
+        Ident::new(if _impl_path { sym::std } else { sym::core }, DUMMY_SP),
         Ident::new(sym::rad_protected, DUMMY_SP),
     ];
 
@@ -258,6 +258,6 @@ fn multithreading_ident() -> Ident {
     Ident::from_str_and_span("multithreading", DUMMY_SP)
 }
 
-fn multithreading_ty_ident() -> Ident {
+fn multithreading_impl_ty_ident() -> Ident {
     Ident::from_str_and_span("StdMultithreading", DUMMY_SP)
 }

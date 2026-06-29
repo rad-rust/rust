@@ -329,6 +329,10 @@ pub mod task;
 #[allow(missing_docs)]
 pub mod alloc;
 
+/* Core library additions for `rad_protected`  */
+#[stable(feature = "rad_protected", since = "1.95.0")]
+pub mod rad_protected;
+
 // note: does not need to be public
 mod bool;
 mod escape;
