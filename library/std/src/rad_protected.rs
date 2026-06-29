@@ -2,7 +2,7 @@
 
 use crate::thread;
 use crate::sync::{Arc, Barrier};
-use core::rad_protected::Multithreading;
+use core::rad_protected::{Multithreading, vote};
 
 /// An implementation of rad_protected `Multithreading` using the Rust std library
 #[stable(feature = "rad_protected", since = "1.95.0")]
@@ -46,9 +46,11 @@ impl Multithreading for StdMultithreading {
         let i2 = thread::spawn(f2);
         let i3 = thread::spawn(f3);
 
-        i1.join().unwrap();
-        i2.join().unwrap();
-        i3.join().unwrap()
+        vote(
+            i1.join().unwrap(), 
+            i2.join().unwrap(),
+            i3.join().unwrap()
+        )
     }
 
     fn enter_critical_section(&self) -> bool {
