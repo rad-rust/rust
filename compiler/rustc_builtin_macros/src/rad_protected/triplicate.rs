@@ -12,6 +12,26 @@ pub(crate) fn triplicate(
     item: Annotatable,
 ) -> Vec<Annotatable> {
 
+    let opts = match parse_attr_args(cx, meta_item) {
+        Some(o) => o,
+        None => return vec![item]
+    };
+
+    if opts.triplicate_unsafe {
+        let valid = matches!(
+            &item,
+            Annotatable::Expr(box ast::Expr {
+                kind: ast::ExprKind::Block(block, _),
+                ..
+            }) if matches!(block.rules, ast::BlockCheckMode::Unsafe(_))
+        );
+
+        if !valid {
+            cx.dcx().span_err(span, "`#[rad_protected(triplicate_unsafe)]` can only be applied to `unsafe` blocks");
+        }
+        return vec![item];
+    }
+
     let Annotatable::Item(box ast::Item {
         kind: ast::ItemKind::Fn(box ref func),
         ref vis,
@@ -30,28 +50,6 @@ pub(crate) fn triplicate(
     };
 
     patch_unsafe_blocks(cx, &mut func_body);
-
-    let attr_opts: ThinVec<MetaItemInner> = match meta_item.kind {
-        ast::MetaItemKind::List(ref vec) => vec.clone(),
-        ast::MetaItemKind::Word => thin_vec![],
-        _ => {
-            cx.dcx().span_err(meta_item.span, "unsupported options kind in `#[rad_protected]`");
-            thin_vec![]
-        }
-    };
-    
-    let mut triplicate_body = true;
-
-    for opt in attr_opts {
-        match opt {
-            MetaItemInner::MetaItem(opt) if opt.has_name(sym::no_triplicate_body) => {
-                triplicate_body = false;
-            }
-            _ => {
-                cx.dcx().span_err(meta_item.span, "unsupported option in `#[rad_protected]`");
-            }
-        }
-    }
     
     let make_inner_fn_stmt = |suffix_num: usize| {
 
@@ -70,7 +68,7 @@ pub(crate) fn triplicate(
         };
 
         let inner_attrs = 
-            if triplicate_body {
+            if opts.triplicate_body {
                 let inline_attr = cx.attr_nested_word(sym::inline, sym::never, DUMMY_SP);
                 let link_section_attr = cx.attr_name_value_str_unsafe(
                     sym::link_section, 
@@ -104,7 +102,7 @@ pub(crate) fn triplicate(
     }).collect();
 
     let make_call_expr = |suffix_num: usize| {
-        let fn_ident = inner_fn_ident(func.ident.name, if triplicate_body { suffix_num } else { 1 });
+        let fn_ident = inner_fn_ident(func.ident.name, if opts.triplicate_body { suffix_num } else { 1 });
 
         let multithreading_clone_expr = cx.expr_method_call(
             DUMMY_SP,
@@ -146,7 +144,7 @@ pub(crate) fn triplicate(
 
     let mut wrapper_stmts: ThinVec<ast::Stmt> = thin_vec![];
     
-    wrapper_stmts.extend((1..=if triplicate_body { NUM_DUPLICATES } else { 1 }).map(make_inner_fn_stmt));
+    wrapper_stmts.extend((1..=if opts.triplicate_body { NUM_DUPLICATES } else { 1 }).map(make_inner_fn_stmt));
 
     let multithreading_use_item = {
         let path = cx.path_global(DUMMY_SP, rad_protected_path(false, vec![
@@ -225,6 +223,44 @@ pub(crate) fn triplicate(
     wrapper.vis = vis.clone();
 
     vec![Annotatable::Item(wrapper)]
+}
+
+
+struct AttrOpts {
+    triplicate_body: bool,
+    triplicate_unsafe: bool,
+}
+
+fn parse_attr_args(cx: &ExtCtxt<'_>, meta_item: &ast::MetaItem) -> Option<AttrOpts> {
+
+    let attr_opts: ThinVec<MetaItemInner> = match meta_item.kind {
+        ast::MetaItemKind::List(ref vec) => vec.clone(),
+        ast::MetaItemKind::Word => thin_vec![],
+        _ => {
+            cx.dcx().span_err(meta_item.span, "unsupported options kind in `#[rad_protected]`");
+            return None;
+        }
+    };
+
+    let mut triplicate_body = true;
+    let mut triplicate_unsafe = false;
+
+    for opt in attr_opts {
+        match opt {
+            MetaItemInner::MetaItem(opt) if opt.has_name(sym::no_triplicate_body) => {
+                triplicate_body = false;
+            }
+            MetaItemInner::MetaItem(opt) if opt.has_name(sym::triplicate_unsafe) => {
+                triplicate_unsafe = true;
+            }
+            _ => {
+                cx.dcx().span_err(opt.span(), "unsupported option in `#[rad_protected]`");
+               return None;
+            }
+        }
+    }
+
+    Some(AttrOpts { triplicate_body, triplicate_unsafe })
 }
 
 fn add_mutex_param(cx: &ExtCtxt<'_>, sig: &mut FnSig) {

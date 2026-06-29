@@ -1,8 +1,9 @@
 use rustc_ast as ast;
 use rustc_ast::mut_visit::{self, MutVisitor};
 use rustc_expand::base::ExtCtxt;
-use rustc_span::{symbol::Ident, DUMMY_SP};
-use thin_vec::thin_vec;
+use rustc_span::{symbol::Ident, sym, DUMMY_SP};
+use thin_vec::{ThinVec, thin_vec};
+use rustc_ast::MetaItemInner;
 
 pub(crate) fn patch_unsafe_blocks(cx: &ExtCtxt<'_>, body: &mut ast::Block) {
     let mut visitor = UnsafeBlockRewriter { cx };
@@ -18,7 +19,10 @@ impl MutVisitor for UnsafeBlockRewriter<'_, '_> {
 
         if let ast::ExprKind::Block(block, _) = &mut expr.kind {
             if matches!(block.rules, ast::BlockCheckMode::Unsafe(_)) {
-                patch_unsafe_block(self.cx, block);
+
+                if !skip_patch(&expr.attrs) {
+                    patch_unsafe_block(self.cx, block);
+                }
                 return;
             }
         }
@@ -57,4 +61,23 @@ fn patch_unsafe_block(cx: &ExtCtxt<'_>, block: &mut ast::Block) {
         if_stmt,
         exit_call_stmt
     ];
+}
+
+fn skip_patch(attrs: &ThinVec<ast::Attribute>) -> bool {
+    attrs.iter().any(|attr| {         
+        let Some(meta) = attr.meta() else {
+            return false;
+        };
+
+        if !meta.has_name(sym::rad_protected) {
+            return false;
+        }
+
+        match &meta.kind {
+            ast::MetaItemKind::List(items) => items.iter().any(|item| {
+                matches!(item, MetaItemInner::MetaItem(mi) if mi.has_name(sym::triplicate_unsafe))
+            }),
+            _ => false,
+        }
+    })
 }
