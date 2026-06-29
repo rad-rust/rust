@@ -30,7 +30,7 @@ impl MutVisitor for UnsafeBlockRewriter<'_, '_> {
 fn patch_unsafe_block(cx: &ExtCtxt<'_>, block: &mut ast::Block) {
 
     let multithreading_method_call = |name: &str| {
-        let multithreading_ident = Ident::from_str_and_span("multithreading", DUMMY_SP);
+        let multithreading_ident = Ident::from_str_and_span("_multithreading", DUMMY_SP);
         let method_name_ident = Ident::from_str_and_span(name, DUMMY_SP);
 
         cx.expr_method_call(

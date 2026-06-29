@@ -255,7 +255,7 @@ fn inner_fn_ident(name: Symbol, suffix_num: usize) -> Ident {
 }
 
 fn multithreading_ident() -> Ident {
-    Ident::from_str_and_span("multithreading", DUMMY_SP)
+    Ident::from_str_and_span("_multithreading", DUMMY_SP)
 }
 
 fn multithreading_impl_ty_ident() -> Ident {
