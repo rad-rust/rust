@@ -2,7 +2,6 @@ use rustc_ast as ast;
 use rustc_expand::base::{Annotatable, ExtCtxt};
 use rustc_span::{Span, symbol::Ident, sym, DUMMY_SP};
 use thin_vec::thin_vec;
-use crate::rad_protected::patch_unsafe::patch_unsafe_blocks;
 
 pub(crate) fn triplicate(
     cx: &mut ExtCtxt<'_>,
@@ -19,7 +18,7 @@ pub(crate) fn triplicate(
         return vec![item];
     };
 
-    let mut func_body = match &mut func.body {
+    let func_body = match &mut func.body {
         Some(b) => b,
         None => {
             cx.dcx().span_err(span, "`#[rad_protected]` can only be applied to functions with a body");
@@ -41,8 +40,6 @@ pub(crate) fn triplicate(
             thin_vec![]
         )
     ));
-
-    patch_unsafe_blocks(cx, &mut func_body);
 
     vec![item]
 }
