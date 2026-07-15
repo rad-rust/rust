@@ -611,9 +611,12 @@ pub mod random;
 pub mod sync;
 pub mod time;
 
-
+/// Std library additions for `rad_protected`
 #[stable(feature = "rad_protected", since = "1.95.0")]
 pub mod rad_protected;
+/// Re-export the runtime for easier usage
+#[stable(feature = "rad_protected", since = "1.95.0")]
+pub use rad_protected::runtime::Runtime as RadRustRuntime;
 
 // Pull in `std_float` crate  into std. The contents of
 // `std_float` are in a different repository: rust-lang/portable-simd.
