@@ -1,7 +1,7 @@
 use rustc_ast as ast;
 use rustc_ast::mut_visit::{self, MutVisitor};
 use rustc_expand::base::ExtCtxt;
-use rustc_span::{symbol::Ident, sym, DUMMY_SP};
+use rustc_span::{symbol::Ident, Symbol, sym, DUMMY_SP};
 use thin_vec::{ThinVec, thin_vec};
 use rustc_ast::MetaItemInner;
 
@@ -33,20 +33,20 @@ impl MutVisitor for UnsafeBlockRewriter<'_, '_> {
 
 fn patch_unsafe_block(cx: &ExtCtxt<'_>, block: &mut ast::Block) {
 
-    let multithreading_method_call = |name: &str| {
-        let multithreading_ident = Ident::from_str_and_span("_multithreading", DUMMY_SP);
-        let method_name_ident = Ident::from_str_and_span(name, DUMMY_SP);
-
-        cx.expr_method_call(
+    let runtime_method_call = |name: Symbol| {
+        cx.expr_call_global(
             DUMMY_SP,
-            cx.expr_ident(DUMMY_SP, multithreading_ident),
-            method_name_ident,
-            thin_vec![],
+            vec![
+                Ident::new(sym::std, DUMMY_SP),
+                Ident::new(sym::RadRustRuntime, DUMMY_SP),
+                Ident::new(name, DUMMY_SP),
+            ], 
+            thin_vec![]
         )
     };
 
-    let enter_call = multithreading_method_call("enter_critical_section");
-    let exit_call = multithreading_method_call("exit_critical_section");
+    let enter_call = runtime_method_call(sym::enter_critical_section);
+    let exit_call = runtime_method_call(sym::exit_critical_section);
 
     let if_stmt = cx.stmt_expr(cx.expr_if(
         DUMMY_SP,
