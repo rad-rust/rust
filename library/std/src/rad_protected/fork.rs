@@ -1,4 +1,5 @@
-use crate::{fs::File, io::{BufRead, BufReader}, ptr};
+use super::mini_std::{fs::File, io::BufReader};
+use core::ptr;
 use super::libc_helpers::{pipe, close, fork, sysconf_sc_pagesize};
 use super::role::{Child, ChildLink, SyncPipe};
 

@@ -1,6 +1,6 @@
+use super::mini_std::{io, os::fd::OwnedFd};
+use core::ptr;
 use libc;
-use crate::{io, ptr};
-use crate::os::fd::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd};
 
 pub(super) type Pid = libc::pid_t;
 

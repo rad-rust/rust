@@ -1,5 +1,4 @@
-use crate::os::fd::OwnedFd;
-use crate::sync::Mutex;
+use super::mini_std::{os::fd::OwnedFd, sync::Mutex};
 use super::libc_helpers::{write, read, kill, waitpid, Pid};
 
 pub(super) static ROLE: Mutex<Option<Role>> = Mutex::new(None);
