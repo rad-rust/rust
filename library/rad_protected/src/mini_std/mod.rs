@@ -1,4 +1,4 @@
-//! A near-faithful recreation of the minimal subset of `std` required by `rad_protected`
+//! A near-faithful recreation and extension of the minimal subset of `std` required by `rad_protected`
 //! for `no_std` environments.
 //!
 //! This module provides a `std`-like API to isolate platform-specific functionality.
@@ -7,7 +7,7 @@
 //! other platforms as needed.
 //!
 //! Because this module mirrors the `std` API, it can be removed entirely on platforms 
-//! where the standard library is available.
+//! where the standard library is available, other than the IPC module.
 //! 
 //! Since some `rad_protected` functions are guaranteed to invoke certain `mini_std` 
 //! functions from a single thread, synchronization is not uniformly implemented throughout this module.
@@ -17,4 +17,4 @@
 pub mod io;
 pub mod sync;
 pub mod fs;
-pub mod os;
+pub mod ipc;

@@ -1,5 +1,6 @@
-use super::mini_std::{os::fd::OwnedFd, sync::Mutex};
-use super::libc_helpers::{write, read, kill, waitpid, Pid};
+use super::mini_std::sync::Mutex;
+use super::libc_helpers::{kill, waitpid, Pid};
+use super::shared_memory::SharedMemory;
 
 pub(super) static ROLE: Mutex<Option<Role>> = Mutex::new(None);
 
@@ -9,84 +10,72 @@ pub(super) enum Role {
     Child(Child),
 }
 
-impl Role {
-    pub(super) fn is_parent(&self) -> bool {
-        matches!(self, Role::Parent(_))
-    }
-}
-
 #[derive(Debug)]
 pub struct Parent {
+    shared_memory: SharedMemory,
     child1: ChildLink,
     child2: ChildLink,
 }
 
 impl Parent {
-    pub(super) fn new(child1: ChildLink, child2: ChildLink) -> Self {
-        Self { child1, child2 }
+    pub(super) fn new(shared_memory: SharedMemory, child1: ChildLink, child2: ChildLink) -> Self {
+        Self { shared_memory, child1, child2 }
     }
 
-    pub(super) fn wait_for_children(&self) {
-        self.child1.pipe.wait_for_update();
-        self.child2.pipe.wait_for_update();
-    }
-    pub(super) fn update_children(&self) {
-        self.child1.pipe.send_update();
-        self.child2.pipe.send_update();
-    }
     pub(super) fn kill_children(&self) {
         self.child1.kill_child();
         self.child2.kill_child();
+    }
+
+    pub(super) fn close_shared_mem(&self) {
+        self.shared_memory.close();
     }
 }
 
 #[derive(Debug)]
 pub struct Child {
-    pipe: SyncPipe,
+    shared_memory: SharedMemory
 }
 
 impl Child {
-    pub(super) fn new(pipe: SyncPipe) -> Self {
-        Self { pipe }
-    }
-    
-    pub(super) fn update_parent(&self) {
-        self.pipe.send_update();
-    }
-    pub(super) fn wait_for_parent(&self) {
-        self.pipe.wait_for_update();
+    pub(super) fn new(shared_memory: SharedMemory) -> Self {
+        Self { shared_memory }
     }
 }
 
-#[derive(Debug)]
-pub(super) struct SyncPipe {
-    from_peer: OwnedFd,
-    to_peer: OwnedFd,
+pub(super) trait Syncable {
+    fn sync(&self) -> bool;
 }
 
-impl SyncPipe {
-    pub(super) fn new(from_peer: OwnedFd, to_peer: OwnedFd) -> Self {
-        Self { from_peer, to_peer }
+impl Syncable for Parent {
+    fn sync(&self) -> bool {
+        self.shared_memory.sync()
     }
+}
 
-    pub(super) fn wait_for_update(&self) {
-        let mut buf = [0u8; 1];
-        let _ = read(&self.from_peer, &mut buf);
+impl Syncable for Child {
+    fn sync(&self) -> bool {
+        self.shared_memory.sync()
     }
-    pub(super) fn send_update(&self) {
-        let _ = write(&self.to_peer, &[0u8]);
+}
+
+impl Syncable for Role {
+    fn sync(&self) -> bool {
+        match self {
+            Role::Parent(parent) => parent.sync(),
+            Role::Child(child) => child.sync(),
+        }
     }
 }
 
 #[derive(Debug)]
 pub(super) struct ChildLink {
     pid: Pid,
-    pipe: SyncPipe,
 }
 
 impl ChildLink {
-    pub(super) fn new(pid: Pid, pipe: SyncPipe) -> Self {
-        Self { pid, pipe }
+    pub(super) fn new(pid: Pid) -> Self {
+        Self { pid }
     }
 
     pub(super) fn kill_child(&self) {

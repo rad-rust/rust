@@ -1,5 +1,6 @@
 use super::fork::{fork_copy, ForkOutcome};
-use super::role::{ROLE, Role, Parent};
+use super::role::{ROLE, Role, Parent, Child, Syncable};
+use super::shared_memory::SharedMemory;
 
 /// Runtime for rad_protected
 #[stable(feature = "rad_protected", since = "1.95.0")]
@@ -16,28 +17,37 @@ impl Runtime {
             return Err(());
         }
 
+        let Ok(shared_memory) = SharedMemory::open() else {
+            return Err(());
+        };
+
         let link1 = match fork_copy() {
             Some(ForkOutcome::Parent(link1)) => link1,
-            Some(ForkOutcome::Child(child)) => {
-                ROLE.lock().unwrap().replace(Role::Child(child));
+            Some(ForkOutcome::Child) => {
+                ROLE.lock().unwrap().replace(Role::Child(Child::new(shared_memory)));
                 return Ok(ProcessGuard{});
             }
-            None => { return Err(()); }
+            None => { 
+                shared_memory.close();
+                return Err(());
+            }
         };
 
         let link2 = match fork_copy() {
             Some(ForkOutcome::Parent(link2)) => link2,
-            Some(ForkOutcome::Child(child)) => {
-                ROLE.lock().unwrap().replace(Role::Child(child));
+            Some(ForkOutcome::Child) => {
+                ROLE.lock().unwrap().replace(Role::Child(Child::new(shared_memory)));
                 return Ok(ProcessGuard{});
             }
             None => {
+                shared_memory.close();
                 link1.kill_child();
                 return Err(());
             }
         };
 
         ROLE.lock().unwrap().replace(Role::Parent(Parent::new(
+            shared_memory,
             link1,
             link2,
         )));
@@ -51,8 +61,7 @@ impl Runtime {
     pub fn enter_critical_section() -> bool {
         let guard = ROLE.lock().unwrap();
         if let Some(role) = guard.as_ref() {
-            Self::sync(role);
-            return role.is_parent();
+            return Self::sync(role);
         }
         true
     }
@@ -72,26 +81,19 @@ impl Runtime {
     pub fn close() {
         let mut guard = ROLE.lock().unwrap();
         if let Some(role) = guard.as_ref() {
+            Self::sync(role);
             if let Role::Parent(parent) = role {
                 parent.kill_children();
+                parent.close_shared_mem();
+            } else {
+                unsafe { libc::pause(); }
             }
-            Self::sync(role);
         }
         guard.take();
     }
 
-    fn sync(role: &Role) {
-        match role {
-            Role::Parent(parent) => {
-                parent.wait_for_children();
-                parent.update_children();
-            }
-            Role::Child(child) => {
-                child.update_parent();
-                child.wait_for_parent();
-            }
-        
-        }
+    fn sync(role: &Role) -> bool {
+        role.sync()
     }
 }
 

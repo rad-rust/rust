@@ -1,42 +1,24 @@
 use super::mini_std::{fs::File, io::BufReader};
 use core::ptr;
-use super::libc_helpers::{pipe, close, fork, sysconf_sc_pagesize};
-use super::role::{Child, ChildLink, SyncPipe};
+use super::libc_helpers::{fork, sysconf_sc_pagesize};
+use super::role::ChildLink;
 
 pub(super) fn fork_copy() -> Option<ForkOutcome> {
-    // Parent -> child
-    let (p2c_read, p2c_write) = pipe().ok()?;
-    // Child -> parent
-    let (c2p_read, c2p_write) = pipe().ok()?;
 
     match unsafe { fork() }.ok()? {
         0 => {
-            
-            close(p2c_write).ok()?;
-            close(c2p_read).ok()?;
-            
             force_copy_pages();
-
-            Some(ForkOutcome::Child(Child::new(
-                SyncPipe::new(p2c_read, c2p_write)
-            )))
+            Some(ForkOutcome::Child)
         },
         child_pid => {
-            
-            close(p2c_read).ok()?;
-            close(c2p_write).ok()?;
-
-            Some(ForkOutcome::Parent(ChildLink::new(
-                child_pid,
-                SyncPipe::new(c2p_read, p2c_write)
-            )))
+            Some(ForkOutcome::Parent(ChildLink::new(child_pid)))
         },
     }
 }
 
 pub(super) enum ForkOutcome {
     Parent(ChildLink),
-    Child(Child),
+    Child,
 }
 
 fn force_copy_pages() {
