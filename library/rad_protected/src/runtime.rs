@@ -1,5 +1,5 @@
 use super::fork::{fork_copy, ForkOutcome};
-use super::role::{ROLE, Role, Parent, Child, Syncable};
+use super::role::{ROLE, Role, Parent, Child};
 use super::shared_memory::SharedMemory;
 
 /// Runtime for rad_protected
@@ -59,9 +59,9 @@ impl Runtime {
     /// Syncs the three processes. Returns `true` for the one leader (parent) process
     #[stable(feature = "rad_protected", since = "1.95.0")]
     pub fn enter_critical_section() -> bool {
-        let guard = ROLE.lock().unwrap();
-        if let Some(role) = guard.as_ref() {
-            return Self::sync(role);
+        let mut guard = ROLE.lock().unwrap();
+        if let Some(role) = guard.as_mut() {
+            return role.ctx_mut().enter_critical_section();
         }
         true
     }
@@ -70,9 +70,9 @@ impl Runtime {
     /// Syncs the three processes
     #[stable(feature = "rad_protected", since = "1.95.0")]
     pub fn exit_critical_section() {
-        let guard = ROLE.lock().unwrap();
-        if let Some(role) = guard.as_ref() {
-            Self::sync(role);
+        let mut guard = ROLE.lock().unwrap();
+        if let Some(role) = guard.as_mut() {
+            return role.ctx_mut().exit_critical_section();
         }
     }
 
@@ -81,7 +81,7 @@ impl Runtime {
     pub fn close() {
         let mut guard = ROLE.lock().unwrap();
         if let Some(role) = guard.as_ref() {
-            Self::sync(role);
+            role.ctx().sync();
             if let Role::Parent(parent) = role {
                 parent.kill_children();
                 parent.close_shared_mem();
@@ -90,10 +90,6 @@ impl Runtime {
             }
         }
         guard.take();
-    }
-
-    fn sync(role: &Role) -> bool {
-        role.sync()
     }
 }
 
