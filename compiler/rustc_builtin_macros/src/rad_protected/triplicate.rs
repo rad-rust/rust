@@ -2,13 +2,44 @@ use rustc_ast as ast;
 use rustc_expand::base::{Annotatable, ExtCtxt};
 use rustc_span::{Span, symbol::Ident, sym, DUMMY_SP};
 use thin_vec::thin_vec;
+use super::parse_attr_opts::parse_attr_opts;
 
 pub(crate) fn triplicate(
     cx: &mut ExtCtxt<'_>,
     span: Span,
-    _meta_item: &ast::MetaItem,
+    meta_item: &ast::MetaItem,
     mut item: Annotatable,
 ) -> Vec<Annotatable> {
+
+    let Some(opts) = parse_attr_opts(cx, meta_item) else {
+        return vec![item];
+    };
+
+    if opts.triplicate_unsafe() {
+        let valid = match &mut item {
+            Annotatable::Expr(expr)
+                if matches!(&expr.kind, ast::ExprKind::Block(block, _)
+                    if matches!(block.rules, ast::BlockCheckMode::Unsafe(_))
+                ) => {
+                    expr.attrs.push(cx.attr_nested_word(
+                        sym::rad_protected_mir,
+                        sym::triplicate_unsafe,
+                        DUMMY_SP,
+                    ));
+                    true
+                }
+            _ => false,
+        };
+
+        if !valid {
+            cx.dcx().span_err(
+                span,
+                "`#[rad_protected(triplicate_unsafe)]` can only be applied to `unsafe` blocks",
+            );
+        }
+
+        return vec![item];
+    }
 
     let Annotatable::Item(box ast::Item {
         kind: ast::ItemKind::Fn(box ref mut func),

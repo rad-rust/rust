@@ -35,7 +35,7 @@ impl MutVisitor for UnsafeBlockRewriter<'_, '_> {
         if let ast::ExprKind::Block(block, _) = &mut expr.kind {
             if matches!(block.rules, ast::BlockCheckMode::Unsafe(_)) {
 
-                if !skip_patch(&expr.attrs) {
+                if !skip_patch(&mut expr.attrs) {
                     patch_unsafe_block(self.cx, block);
                 }
                 return;
@@ -77,22 +77,32 @@ fn patch_unsafe_block(cx: &mut ExtCtxt<'_>, block: &mut ast::Block) {
     block.stmts = thin_vec![if_stmt, exit_call_stmt];
 }
 
-fn skip_patch(attrs: &ThinVec<ast::Attribute>) -> bool {
-    attrs.iter().any(|attr| {         
-        let Some(meta) = attr.meta() else {
-            return false;
-        };
+fn skip_patch(attrs: &mut ThinVec<ast::Attribute>) -> bool {
+    let mut removed = false;
 
-        if !meta.has_name(sym::rad_protected) {
-            return false;
-        }
+    attrs.retain(|attr| {
+        let keep = !attr.meta().is_some_and(is_skip_attr);
 
-        match &meta.kind {
-            ast::MetaItemKind::List(items) => items.iter().any(|item| {
-                matches!(item, MetaItemInner::MetaItem(mi) if mi.has_name(sym::triplicate_unsafe))
-            }),
-            _ => false,
+        if !keep {
+            removed = true;
         }
+        keep
+    });
+
+    removed
+}
+
+fn is_skip_attr(meta: ast::MetaItem) -> bool {
+    if !meta.has_name(sym::rad_protected_mir) {
+        return false;
+    }
+
+    let ast::MetaItemKind::List(items) = &meta.kind else {
+        return false;
+    };
+
+    items.iter().any(|item| {
+        matches!(item, MetaItemInner::MetaItem(mi) if mi.has_name(sym::triplicate_unsafe))
     })
 }
 
