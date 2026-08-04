@@ -41,19 +41,25 @@ pub(crate) fn triplicate(
         return vec![item];
     }
 
-    let Annotatable::Item(box ast::Item {
-        kind: ast::ItemKind::Fn(box ref mut func),
-        ..
-    }) = item else {
+    let Annotatable::Item(mut item) = item else {
         cx.dcx().span_err(span, "`#[rad_protected]` can only be applied to functions");
         return vec![item];
+    };
+
+    let ast::Item {
+        kind: ast::ItemKind::Fn(func),
+        ..
+    } = &mut *item
+    else {
+        cx.dcx().span_err(span, "`#[rad_protected]` can only be applied to functions");
+        return vec![Annotatable::Item(item)];
     };
 
     let func_body = match &mut func.body {
         Some(b) => b,
         None => {
             cx.dcx().span_err(span, "`#[rad_protected]` can only be applied to functions with a body");
-            return vec![item];
+            return vec![Annotatable::Item(item)];
         }
     };
 
@@ -72,5 +78,8 @@ pub(crate) fn triplicate(
         )
     ));
 
-    vec![item]
+    let mir_attr = cx.attr_word(sym::rad_protected_mir, DUMMY_SP);
+    item.attrs.push(mir_attr);
+
+    vec![Annotatable::Item(item)]
 }
