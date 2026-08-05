@@ -7,6 +7,7 @@ use rustc_middle::mir::{
 };
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, TyCtxt};
+use super::rad_protected_liveness_analysis::LivenessAnalysis;
 
 pub(super) struct RadProtectedAnalysis;
 
@@ -24,6 +25,35 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
             return;
         }
 
+        let liveness = LivenessAnalysis::analyze(body);
+
+        eprintln!("=== Liveness analysis for {:?} ===", def_id);
+        for (bb, live) in liveness.iter_enumerated() {
+            eprintln!("BasicBlock {:?}", bb);
+
+            eprintln!("  IN:");
+            for local in sorted_locals(&live._in()) {
+                let decl = &body.local_decls[local];
+                eprintln!(
+                    "    {:?}: {:?}",
+                    local,
+                    decl.ty
+                );
+            }
+
+            eprintln!("  OUT:");
+            for local in sorted_locals(&live.out()) {
+                let decl = &body.local_decls[local];
+                eprintln!(
+                    "    {:?}: {:?}",
+                    local,
+                    decl.ty
+                );
+            }
+        }
+
+        eprintln!("================================");
+        
         let sources = build_pointer_sources(body);
 
         with_no_trimmed_paths!({
@@ -421,4 +451,14 @@ fn resolve_pointer_source<'tcx>(
             }
         }
     }
+}
+
+fn sorted_locals(set: &FxHashSet<Local>) -> Vec<Local> {
+    // Values are sorted after becoming an iter
+    // Additionally, this method is only used to print debugging info
+    #[allow(rustc::potential_query_instability)]
+    let mut locals: Vec<Local> = set.iter().copied().collect();
+
+    locals.sort();
+    locals
 }
