@@ -5,7 +5,7 @@ use rustc_middle::mir::{
 use std::ops::{Deref, DerefMut};
 use std::collections::VecDeque;
 use rustc_data_structures::{fx::FxHashSet, graph::Successors};
-use rustc_index::IndexVec;
+use rustc_index::{bit_set::DenseBitSet, IndexVec};
 
 pub(super) struct LivenessAnalysis {
     liveness: IndexVec<BasicBlock, Liveness>,
@@ -24,10 +24,11 @@ impl LivenessAnalysis {
             basic_blocks.len()
         );
         
-        let mut work_queue: VecDeque<BasicBlock> = basic_blocks.indices().collect();
+        let mut work_queue: VecDeque<BasicBlock> = basic_blocks.indices().rev().collect();
+        let mut in_queue = DenseBitSet::new_filled(basic_blocks.len());
 
-        while !work_queue.is_empty() {
-            let bb_idx = work_queue.pop_front().unwrap();
+        while let Some(bb_idx) = work_queue.pop_front() {
+            in_queue.remove(bb_idx);
 
             let old_in = liveness[bb_idx]._in.clone();
             liveness[bb_idx].out.clear();
@@ -46,8 +47,10 @@ impl LivenessAnalysis {
             liveness[bb_idx]._in = live_in;
 
             if liveness[bb_idx]._in != old_in {
-                for p in basic_blocks.predecessors()[bb_idx].clone() {
-                    work_queue.push_back(p);
+                for &p in basic_blocks.predecessors()[bb_idx].iter() {
+                    if in_queue.insert(p) {
+                        work_queue.push_back(p);
+                    }
                 }
             }
         }
