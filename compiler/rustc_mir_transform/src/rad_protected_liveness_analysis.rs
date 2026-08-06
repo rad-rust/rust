@@ -1,6 +1,6 @@
 use rustc_middle::mir::{BasicBlock, Location, visit::{PlaceContext, Visitor}};
 use rustc_middle::mir::{
-    Body, BasicBlocks, TerminatorKind, Local, Place, Rvalue
+    Body, BasicBlocks, Local, Place, Rvalue
 };
 use std::ops::{Deref, DerefMut};
 use std::collections::VecDeque;
@@ -24,7 +24,7 @@ impl LivenessAnalysis {
             basic_blocks.len()
         );
         
-        let mut work_queue: VecDeque<BasicBlock> = VecDeque::from([gk_analysis.exit_block]);
+        let mut work_queue: VecDeque<BasicBlock> = basic_blocks.indices().collect();
 
         while !work_queue.is_empty() {
             let bb_idx = work_queue.pop_front().unwrap();
@@ -60,7 +60,6 @@ impl LivenessAnalysis {
             |_| GenKill::new(),
             basic_blocks.len()
         );
-        let mut exit_block: Option<BasicBlock> = None;
 
         for (bb_idx, bb_data) in basic_blocks.iter_enumerated() {
             let mut collector = GenKillCollector::new();
@@ -82,13 +81,9 @@ impl LivenessAnalysis {
             collector.visit_terminator(bb_data.terminator(), terminator_location);
 
             gen_kill[bb_idx] = collector.take();
-
-            if matches!(bb_data.terminator().kind, TerminatorKind::Return) {
-                exit_block = Some(bb_idx);
-            }
         }
 
-        GenKillAnalysis { gen_kill, exit_block: exit_block.unwrap() }
+        GenKillAnalysis { gen_kill }
     }
 
 }
@@ -130,7 +125,6 @@ impl Liveness {
 
 struct GenKillAnalysis {
     gen_kill: IndexVec<BasicBlock, GenKill>,
-    exit_block: BasicBlock,
 }
 
 
