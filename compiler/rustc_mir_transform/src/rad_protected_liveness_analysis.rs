@@ -1,20 +1,50 @@
 use rustc_middle::mir::{BasicBlock, Location, visit::{PlaceContext, Visitor}};
 use rustc_middle::mir::{
-    Body, BasicBlocks, Local, Place, Rvalue
+    Body, BasicBlocks, Local, Place, Rvalue, TerminatorKind, BasicBlockData
 };
 use std::ops::{Deref, DerefMut};
 use std::collections::VecDeque;
 use rustc_data_structures::{fx::FxHashSet, graph::Successors};
 use rustc_index::{bit_set::DenseBitSet, IndexVec};
 
-pub(super) struct LivenessAnalysis {
+pub(super) struct CheckpointAnalysis {
+    pub checkpoints: Vec<(BasicBlock, Liveness)>,
+}
+
+impl CheckpointAnalysis {
+    pub(super) fn analyze<'tcx>(body: &Body<'tcx>) -> Self {
+        Self {
+            checkpoints:
+                LivenessAnalysis::analyze(body) 
+                    .liveness
+                    .into_iter_enumerated()
+                    .filter(|(bb_idx, _)| Self::is_checkpoint(&body.basic_blocks[*bb_idx]))
+                    .collect()
+        }
+    }
+
+    fn postprocess_gen_kill<'tcx>(body: &Body<'tcx>, bb_data: &BasicBlockData<'_>, gen_kill: &mut GenKill) {
+        if Self::is_checkpoint(&bb_data) {
+            // Order independent since target is unordered (HashSet)
+            #[allow(rustc::potential_query_instability)]
+            gen_kill.kill.extend(body.local_decls.indices());
+        }
+    }
+
+    pub(super) fn is_checkpoint(bb_data: &BasicBlockData<'_>) -> bool {
+        matches!(bb_data.terminator().kind, TerminatorKind::Call{..} | TerminatorKind::TailCall{..})
+    }
+}
+
+
+struct LivenessAnalysis {
     liveness: IndexVec<BasicBlock, Liveness>,
 }
 
 // Liveness Analysis Pass (based on: https://en.wikipedia.org/wiki/Live-variable_analysis)
 impl LivenessAnalysis {
-    pub(super) fn analyze<'tcx>(body: &Body<'tcx>) -> Self {
-        let gk_analysis = Self::generate_gk_analysis(&body.basic_blocks);
+    fn analyze<'tcx>(body: &Body<'tcx>) -> Self {
+        let gk_analysis = Self::generate_gk_analysis(&body);
         Self::calculate_liveness(gk_analysis, &body.basic_blocks)
     }
 
@@ -58,13 +88,13 @@ impl LivenessAnalysis {
         Self { liveness }
     }
 
-    fn generate_gk_analysis<'tcx>(basic_blocks: &BasicBlocks<'tcx>) -> GenKillAnalysis {
+    fn generate_gk_analysis<'tcx>(body: &Body<'tcx>) -> GenKillAnalysis {
         let mut gen_kill = IndexVec::<BasicBlock, GenKill>::from_fn_n(
             |_| GenKill::new(),
-            basic_blocks.len()
+            body.basic_blocks.len()
         );
 
-        for (bb_idx, bb_data) in basic_blocks.iter_enumerated() {
+        for (bb_idx, bb_data) in body.basic_blocks.iter_enumerated() {
             let mut collector = GenKillCollector::new();
 
             for (stmt_idx, stmt) in bb_data.statements.iter().enumerate() {
@@ -84,11 +114,14 @@ impl LivenessAnalysis {
             collector.visit_terminator(bb_data.terminator(), terminator_location);
 
             gen_kill[bb_idx] = collector.take();
+
+            // Special GenKill postprocessing step to calculate liveness for checkpoints
+            // Not found in typical liveness analysis
+            CheckpointAnalysis::postprocess_gen_kill(body, &bb_data, &mut gen_kill[bb_idx]);
         }
 
         GenKillAnalysis { gen_kill }
     }
-
 }
 
 impl Deref for LivenessAnalysis {

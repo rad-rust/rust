@@ -7,7 +7,7 @@ use rustc_middle::mir::{
 };
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, TyCtxt};
-use super::rad_protected_liveness_analysis::LivenessAnalysis;
+use super::rad_protected_liveness_analysis::CheckpointAnalysis;
 
 pub(super) struct RadProtectedAnalysis;
 
@@ -25,33 +25,13 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
             return;
         }
 
-        let liveness = LivenessAnalysis::analyze(body);
+        let checkpoint_analysis = CheckpointAnalysis::analyze(body);
 
         eprintln!("=== Liveness analysis for {:?} ===", def_id);
-        for (bb, live) in liveness.iter_enumerated() {
-            eprintln!("BasicBlock {:?}", bb);
-
-            eprintln!("  IN:");
-            for local in sorted_locals(&live._in()) {
-                let decl = &body.local_decls[local];
-                eprintln!(
-                    "    {:?}: {:?}",
-                    local,
-                    decl.ty
-                );
-            }
-
-            eprintln!("  OUT:");
-            for local in sorted_locals(&live.out()) {
-                let decl = &body.local_decls[local];
-                eprintln!(
-                    "    {:?}: {:?}",
-                    local,
-                    decl.ty
-                );
-            }
+        for (bb_idx, live) in checkpoint_analysis.checkpoints {
+            eprintln!("Checkpoint {:?}", bb_idx);
+            eprintln!("\tSync: {:?}\n", sorted_locals(&live.out()));
         }
-
         eprintln!("================================");
         
         let sources = build_pointer_sources(body);
