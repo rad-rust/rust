@@ -7,6 +7,7 @@
 //! 
 //! For porting this library to a new target, see mini_std/mod.rs
 
+#![feature(rustc_attrs)]
 #![feature(staged_api)]
 #![allow(internal_features)]
 #![no_std]

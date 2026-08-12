@@ -4,10 +4,12 @@ use rustc_data_structures::fx::{FxHashSet, FxIndexMap};
 use rustc_hir::find_attr;
 use rustc_middle::mir::{
     Body, Local, LocalKind, Operand, Place, RETURN_PLACE, Rvalue, StatementKind, TerminatorKind,
+    BasicBlock, BasicBlockData, Terminator, SourceInfo, LocalDecl, UnwindAction, CallSource,
 };
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, TyCtxt};
 use super::rad_protected_liveness_analysis::CheckpointAnalysis;
+use rustc_span::sym;
 
 pub(super) struct RadProtectedAnalysis;
 
@@ -32,6 +34,12 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
             eprintln!("Checkpoint {:?}", bb_idx);
             eprintln!("\tSync: {:?}\n", sorted_locals(&live.out()));
         }
+        eprintln!("================================");
+
+        eprintln!("=== Injecting checkpoints ===");
+        let bb = inject_checkpoint_call(tcx, body, BasicBlock::from_usize(0));
+        let terminator = body.basic_blocks[bb].terminator();
+        assert!(matches!(terminator.kind, TerminatorKind::Call { .. }));
         eprintln!("================================");
         
         let sources = build_pointer_sources(body);
@@ -441,4 +449,38 @@ fn sorted_locals(set: &FxHashSet<Local>) -> Vec<Local> {
 
     locals.sort();
     locals
+}
+
+fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, after: BasicBlock) -> BasicBlock {
+    let checkpoint_def_id = tcx.get_diagnostic_item(sym::checkpoint).unwrap();
+    let source_info = SourceInfo::outermost(body.span);
+
+    let func = Operand::function_handle(
+        tcx,
+        checkpoint_def_id,
+        [],
+        body.span,
+    );
+
+    let dest_local = body.local_decls.push(LocalDecl::new(tcx.types.unit, body.span));
+
+    let old_data = body.basic_blocks_mut()[after].clone();
+    let continuation = body.basic_blocks_mut().push(old_data);
+
+    let terminator = Terminator {
+        source_info,
+        kind: TerminatorKind::Call {
+            func,
+            args: Box::new([]),
+            destination: Place::from(dest_local),
+            target: Some(continuation),
+            unwind: UnwindAction::Continue,
+            call_source: CallSource::Misc,
+            fn_span: body.span,
+        },
+    };
+
+    let new_block = BasicBlockData::new(Some(terminator), false);
+    body.basic_blocks_mut()[after] = new_block;
+    after
 }

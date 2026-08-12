@@ -613,6 +613,7 @@ symbols! {
         cfi,
         cfi_encoding,
         char,
+        checkpoint,
         client,
         clippy,
         clobber_abi,

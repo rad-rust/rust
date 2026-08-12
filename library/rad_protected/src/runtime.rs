@@ -91,6 +91,16 @@ impl Runtime {
         }
         guard.take();
     }
+
+    #[stable(feature = "rad_protected", since = "1.95.0")]
+    #[rustc_diagnostic_item = "checkpoint"]
+    pub fn checkpoint() {
+        let fd: libc::c_int = 1; 
+        let message = b"Hello, World!\n";
+        let buf = message.as_ptr() as *const libc::c_void;
+        let count = message.len() as libc::size_t;
+        unsafe { libc::write(fd, buf, count); }
+    }
 }
 
 /// Guard to properly drop processes when done with the rad_protected function
