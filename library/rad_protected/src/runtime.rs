@@ -92,6 +92,7 @@ impl Runtime {
         guard.take();
     }
 
+    // Checkpoint given locals via a majority vote over the triplicated threads
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "checkpoint"]
     pub fn checkpoint() {

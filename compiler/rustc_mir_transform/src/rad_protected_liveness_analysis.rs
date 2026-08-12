@@ -2,13 +2,12 @@ use rustc_middle::mir::{BasicBlock, Location, visit::{PlaceContext, Visitor}};
 use rustc_middle::mir::{
     Body, BasicBlocks, Local, Place, Rvalue, TerminatorKind, BasicBlockData
 };
-use std::ops::{Deref, DerefMut};
 use std::collections::VecDeque;
 use rustc_data_structures::{fx::FxHashSet, graph::Successors};
 use rustc_index::{bit_set::DenseBitSet, IndexVec};
 
 pub(super) struct CheckpointAnalysis {
-    pub checkpoints: Vec<(BasicBlock, Liveness)>,
+    pub checkpoints: Vec<(BasicBlock, LiveLocals)>,
 }
 
 impl CheckpointAnalysis {
@@ -19,6 +18,7 @@ impl CheckpointAnalysis {
                     .liveness
                     .into_iter_enumerated()
                     .filter(|(bb_idx, _)| Self::is_checkpoint(&body.basic_blocks[*bb_idx]))
+                    .map(|(bb_idx, liveness)| (bb_idx, LiveLocals::new(liveness.out)))
                     .collect()
         }
     }
@@ -36,6 +36,30 @@ impl CheckpointAnalysis {
     }
 }
 
+pub(super) struct LiveLocals {
+    locals: Vec<Local>,
+}
+
+impl LiveLocals {
+    fn new(locals: FxHashSet<Local>) -> Self {
+        Self {
+            locals: Self::sort_locals(locals)
+        }
+    }
+
+    fn sort_locals(set: FxHashSet<Local>) -> Vec<Local> {
+        // Values are sorted after being collected into a Vec
+        #[allow(rustc::potential_query_instability)]
+        let mut locals: Vec<Local> = set.into_iter().collect();
+
+        locals.sort();
+        locals
+    }
+
+    pub(super) fn locals(&self) -> &Vec<Local> {
+        &self.locals
+    }
+}
 
 struct LivenessAnalysis {
     liveness: IndexVec<BasicBlock, Liveness>,
@@ -124,20 +148,6 @@ impl LivenessAnalysis {
     }
 }
 
-impl Deref for LivenessAnalysis {
-    type Target = IndexVec<BasicBlock, Liveness>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.liveness
-    }
-}
-
-impl DerefMut for LivenessAnalysis {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.liveness
-    }
-}
-
 pub(super) struct Liveness {
     _in: FxHashSet<Local>,
     out: FxHashSet<Local>,
@@ -149,13 +159,6 @@ impl Liveness {
             _in: FxHashSet::default(),
             out: FxHashSet::default(),
         }
-    }
-
-    pub(super) fn _in(&self) -> &FxHashSet<Local> {
-        &self._in
-    }
-    pub(super) fn out(&self) -> &FxHashSet<Local> {
-        &self.out
     }
 }
 

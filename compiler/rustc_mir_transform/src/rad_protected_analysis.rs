@@ -32,7 +32,7 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
         eprintln!("=== Liveness analysis for {:?} ===", def_id);
         for (bb_idx, live) in checkpoint_analysis.checkpoints {
             eprintln!("Checkpoint {:?}", bb_idx);
-            eprintln!("\tSync: {:?}\n", sorted_locals(&live.out()));
+            eprintln!("\tSync: {:?}\n", live.locals());
         }
         eprintln!("================================");
 
@@ -439,16 +439,6 @@ fn resolve_pointer_source<'tcx>(
             }
         }
     }
-}
-
-fn sorted_locals(set: &FxHashSet<Local>) -> Vec<Local> {
-    // Values are sorted after becoming an iter
-    // Additionally, this method is only used to print debugging info
-    #[allow(rustc::potential_query_instability)]
-    let mut locals: Vec<Local> = set.iter().copied().collect();
-
-    locals.sort();
-    locals
 }
 
 fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, after: BasicBlock) -> BasicBlock {
