@@ -5,9 +5,9 @@ use rustc_hir::{find_attr, Mutability, LangItem};
 use rustc_middle::mir::{
     Body, Local, LocalKind, Operand, Place, RETURN_PLACE, Rvalue, StatementKind, TerminatorKind,
     BasicBlock, BasicBlockData, Terminator, SourceInfo, LocalDecl, UnwindAction, CallSource,
-    Statement, CastKind, AggregateKind, ProjectionElem, ConstOperand, Const, ConstValue, interpret::Scalar,
-    RawPtrKind
+    Statement, CastKind, AggregateKind, ProjectionElem, RawPtrKind, CoercionSource, BorrowKind,
 };
+use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use super::rad_protected_liveness_analysis::{CheckpointAnalysis, LiveLocals};
@@ -484,7 +484,7 @@ fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: 
             Rvalue::RawPtr(RawPtrKind::Mut, Place::from(local)),
         );
 
-        // _2 = _1 as *mut u8;
+        // _2 = _1 as *mut u8 (PtrToPtr);
         let u8_ptr = push_local(body, u8_ptr_ty);
         push_assign(
             Place::from(u8_ptr),
@@ -524,31 +524,29 @@ fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: 
         );
     }
 
-    // _1 = &raw const array;
-    let array_ptr_ty = Ty::new_ptr(tcx, array_ty, Mutability::Not);
-    let array_ptr = push_local(body, array_ptr_ty);
+    // _1 = &array;
+    let array_ref_ty = Ty::new_imm_ref(tcx, tcx.lifetimes.re_erased, array_ty);
+    let array_ref = push_local(body, array_ref_ty);
     push_assign(
-        Place::from(array_ptr),
-        Rvalue::RawPtr(RawPtrKind::Const, Place::from(array_local)),
+        Place::from(array_ref),
+        Rvalue::Ref(tcx.lifetimes.re_erased, BorrowKind::Shared, Place::from(array_local)),
     );
 
-    // _2 = _1 as *const (*mut u8, usize)
-    let slot_ptr_ty = Ty::new_ptr(tcx, slot_ty, Mutability::Not);
-    let slot_ptr = push_local(body, slot_ptr_ty);
+    // _2 = move _1 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+    let slice_ty = Ty::new_slice(tcx, slot_ty);
+    let slice_ref_ty = Ty::new_imm_ref(tcx, tcx.lifetimes.re_erased, slice_ty);
+    let slice_ref = push_local(body, slice_ref_ty);
     push_assign(
-        Place::from(slot_ptr),
-        Rvalue::Cast(CastKind::PtrToPtr, Operand::Move(Place::from(array_ptr)), slot_ptr_ty),
-    );
-
-    // num_locals
-    let count_operand = Operand::Constant(Box::new(ConstOperand {
-        span,
-        user_ty: None,
-        const_: Const::Val(
-            ConstValue::Scalar(Scalar::from_target_usize(num_locals, &tcx)),
-            tcx.types.usize,
+        Place::from(slice_ref),
+        Rvalue::Cast(
+            CastKind::PointerCoercion(
+                PointerCoercion::Unsize,
+                CoercionSource::Implicit
+            ),
+            Operand::Move(Place::from(array_ref)),
+            slice_ref_ty,
         ),
-    }));
+    );
 
     let func = Operand::function_handle(tcx, checkpoint_def_id, [], span);
     let dest_local = push_local(body, tcx.types.unit);
@@ -561,8 +559,7 @@ fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: 
         kind: TerminatorKind::Call {
             func,
             args: Box::new([
-                Spanned { node: Operand::Move(Place::from(slot_ptr)), span },
-                Spanned { node: count_operand, span },
+                Spanned { node: Operand::Move(Place::from(slice_ref)), span },
             ]),
             destination: Place::from(dest_local),
             target: Some(continuation),
