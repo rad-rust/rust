@@ -95,12 +95,28 @@ impl Runtime {
     // Checkpoint given locals via a majority vote over the triplicated threads
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "checkpoint"]
-    pub fn checkpoint() {
-        let fd: libc::c_int = 1; 
-        let message = b"Hello, World!\n";
-        let buf = message.as_ptr() as *const libc::c_void;
-        let count = message.len() as libc::size_t;
-        unsafe { libc::write(fd, buf, count); }
+    pub fn checkpoint(locals: *const (*mut u8, usize), count: usize) {
+        if locals.is_null() {
+            return;
+        }
+
+        let hex_fmt = b"%02x \0".as_ptr() as *const libc::c_char;
+        let nl_fmt = b"\n\0".as_ptr() as *const libc::c_char;
+
+        for i in 0..count {
+            let pair_ptr = unsafe { locals.add(i) };
+            let (buf_ptr, buf_len) = unsafe { *pair_ptr };
+
+            if buf_ptr.is_null() || buf_len == 0 {
+                continue;
+            }
+
+            for j in 0..buf_len {
+                let byte = unsafe { *buf_ptr.add(j) };
+                unsafe { libc::printf(hex_fmt, byte as libc::c_int); }
+            }
+            unsafe { libc::printf(nl_fmt); }
+        }
     }
 }
 
