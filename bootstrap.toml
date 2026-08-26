@@ -5,7 +5,7 @@ change-id = 148671
 
 [llvm]
 download-ci-llvm = false
-targets = "RISCV;X86"
+targets = "AArch64;RISCV;X86"
 
 [build]
 target = ["x86_64-unknown-linux-gnu", "riscv64gc-unknown-linux-gnu"]
