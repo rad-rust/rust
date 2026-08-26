@@ -10,7 +10,7 @@ use rustc_middle::mir::{
 use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Ty, TyCtxt};
-use super::rad_protected_liveness_analysis::{CheckpointAnalysis, LiveLocals};
+use super::rad_protected_liveness_analysis::{CheckpointAnalysis, LivePlaces};
 use rustc_span::{sym, Span, source_map::Spanned};
 use rustc_index::IndexVec;
 use rustc_middle::mir::interpret::Scalar;
@@ -36,7 +36,7 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
         eprintln!("=== Liveness analysis for {:?} ===", def_id);
         for (bb_idx, live) in &checkpoint_analysis.checkpoints {
             eprintln!("Checkpoint {:?}", bb_idx);
-            eprintln!("\tSync: {:?}\n", live.locals());
+            eprintln!("\tSync: {:?}\n", live.places());
         }
         eprintln!("================================");
 
@@ -455,11 +455,12 @@ fn resolve_pointer_source<'tcx>(
     }
 }
 
-fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: LiveLocals, next: BasicBlock) -> u64 {
+fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: LivePlaces<'tcx>, next: BasicBlock) -> u64 {
     let checkpoint_def_id = tcx.get_diagnostic_item(sym::checkpoint).unwrap();
     let source_info = SourceInfo::outermost(body.span);
     let span = body.span;
-    let num_locals = live.locals().len() as u64;
+    let places = live.places();
+    let num_places = places.len() as u64;
 
     let mut payload_size: u64 = 0;
 
@@ -480,21 +481,26 @@ fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: 
     let slot_ty = Ty::new_tup(tcx, &[u8_ptr_ty, tcx.types.usize]);
 
     // let array: [(*mut u8, usize); usize];
-    let array_ty = Ty::new_array(tcx, slot_ty, num_locals);
+    let array_ty = Ty::new_array(tcx, slot_ty, num_places);
     let array_local = push_local(body, array_ty);
 
     let typing_env = body.typing_env(tcx);
 
-    for (i, &local) in live.locals().iter().enumerate() {
-        let local_ty = body.local_decls[local].ty;
+    for (i, &place) in places.iter().enumerate() {
+        let place_ty = place.ty(body, tcx).ty;
 
-        // _1 = &raw mut local;
-        let raw_ptr_ty = Ty::new_ptr(tcx, local_ty, Mutability::Mut);
+        eprintln!("\tslot {}: &raw {:?}, size_of::<{}>()", i, place, place_ty);
+
+        let ptr_kind = checkpoint_ptr_kind(tcx, body, place);
+        let ptr_mutbl = match ptr_kind {
+            RawPtrKind::Const => Mutability::Not,
+            _ => Mutability::Mut,
+        };
+
+        // _1 = &raw mut place;
+        let raw_ptr_ty = Ty::new_ptr(tcx, place_ty, ptr_mutbl);
         let raw_ptr = push_local(body, raw_ptr_ty);
-        push_assign(
-            Place::from(raw_ptr),
-            Rvalue::RawPtr(RawPtrKind::Mut, Place::from(local)),
-        );
+        push_assign(Place::from(raw_ptr), Rvalue::RawPtr(ptr_kind, place));
 
         // _2 = _1 as *mut u8 (PtrToPtr);
         let u8_ptr = push_local(body, u8_ptr_ty);
@@ -507,21 +513,21 @@ fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: 
             ),
         );
 
-        let local_size = tcx
-            .layout_of(typing_env.as_query_input(local_ty))
+        let place_size = tcx
+            .layout_of(typing_env.as_query_input(place_ty))
             .unwrap()
             .size
             .bytes();
-        payload_size += local_size;
+        payload_size += place_size;
 
         let size_operand = Operand::const_from_scalar(
             tcx,
             tcx.types.usize,
-            Scalar::from_target_usize(local_size.try_into().unwrap(), &tcx),
+            Scalar::from_target_usize(place_size.try_into().unwrap(), &tcx),
             span,
         );
 
-        // _3 = (_2, local_size);
+        // _3 = (_2, place_size);
         let slot_local = push_local(body, slot_ty);
         push_assign(
             Place::from(slot_local),
@@ -535,7 +541,7 @@ fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: 
         let elem_place = Place::from(array_local).project_deeper(
             &[ProjectionElem::ConstantIndex {
                 offset: i as u64,
-                min_length: num_locals,
+                min_length: num_places,
                 from_end: false
             }],
             tcx,
@@ -609,4 +615,24 @@ fn call_terminator_parts_mut<'a, 'tcx>(kind: &'a mut TerminatorKind<'tcx>) -> Op
         | TerminatorKind::TailCall { func, args, fn_span, .. } => Some((func, args, fn_span)),
         _ => None,
     }
+}
+
+fn checkpoint_ptr_kind<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    place: Place<'tcx>,
+) -> RawPtrKind {
+    for (base, elem) in place.iter_projections() {
+        if !matches!(elem, ProjectionElem::Deref) {
+            continue;
+        }
+
+        if let ty::Ref(_, _, mutbl) = base.ty(body, tcx).ty.kind()
+            && mutbl.is_not()
+        {
+            return RawPtrKind::Const;
+        }
+    }
+
+    RawPtrKind::Mut
 }
