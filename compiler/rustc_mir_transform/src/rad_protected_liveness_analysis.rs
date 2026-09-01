@@ -5,34 +5,46 @@ use rustc_middle::mir::{
 use std::collections::VecDeque;
 use rustc_data_structures::{fx::FxHashSet, graph::Successors};
 use rustc_index::{bit_set::DenseBitSet, IndexVec};
+use rustc_span::def_id::DefId;
+use rustc_span::sym;
+use rustc_middle::ty::TyCtxt;
 
 pub(super) struct CheckpointAnalysis {
     pub checkpoints: Vec<(BasicBlock, LiveLocals)>,
 }
 
 impl CheckpointAnalysis {
-    pub(super) fn analyze<'tcx>(body: &Body<'tcx>) -> Self {
+    pub(super) fn analyze<'tcx>(tcx: TyCtxt<'_>, body: &Body<'tcx>) -> Self {
         Self {
             checkpoints:
-                LivenessAnalysis::analyze(body) 
+                LivenessAnalysis::analyze(tcx, body) 
                     .liveness
                     .into_iter_enumerated()
-                    .filter(|(bb_idx, _)| Self::is_checkpoint(&body.basic_blocks[*bb_idx]))
+                    .filter(|(bb_idx, _)| Self::is_checkpoint(tcx, &body.basic_blocks[*bb_idx]))
                     .map(|(bb_idx, liveness)| (bb_idx, LiveLocals::new(liveness.out)))
                     .collect()
         }
     }
 
-    fn postprocess_gen_kill<'tcx>(body: &Body<'tcx>, bb_data: &BasicBlockData<'_>, gen_kill: &mut GenKill) {
-        if Self::is_checkpoint(&bb_data) {
+    fn postprocess_gen_kill<'tcx>(tcx: TyCtxt<'_>, body: &Body<'tcx>, bb_data: &BasicBlockData<'_>, gen_kill: &mut GenKill) {
+        if Self::is_checkpoint(tcx, &bb_data) {
             // Order independent since target is unordered (HashSet)
             #[allow(rustc::potential_query_instability)]
             gen_kill.kill.extend(body.local_decls.indices());
         }
     }
 
-    pub(super) fn is_checkpoint(bb_data: &BasicBlockData<'_>) -> bool {
-        matches!(bb_data.terminator().kind, TerminatorKind::Call{..} | TerminatorKind::TailCall{..})
+    pub(super) fn is_checkpoint(tcx: TyCtxt<'_>, bb_data: &BasicBlockData<'_>) -> bool {
+        Self::callee_def_id(bb_data).is_some_and(|def_id| tcx.is_diagnostic_item(sym::__checkpoint, def_id))
+    }
+
+    fn callee_def_id<'tcx>(bb_data: &BasicBlockData<'tcx>) -> Option<DefId> {
+        let func = match &bb_data.terminator().kind {
+            TerminatorKind::Call { func, .. } => func,
+            TerminatorKind::TailCall { func, .. } => func,
+            _ => return None,
+        };
+        func.const_fn_def().map(|(def_id, _)| def_id)
     }
 }
 
@@ -67,8 +79,8 @@ struct LivenessAnalysis {
 
 // Liveness Analysis Pass (based on: https://en.wikipedia.org/wiki/Live-variable_analysis)
 impl LivenessAnalysis {
-    fn analyze<'tcx>(body: &Body<'tcx>) -> Self {
-        let gk_analysis = Self::generate_gk_analysis(&body);
+    fn analyze<'tcx>(tcx: TyCtxt<'_>, body: &Body<'tcx>) -> Self {
+        let gk_analysis = Self::generate_gk_analysis(tcx, &body);
         Self::calculate_liveness(gk_analysis, &body.basic_blocks)
     }
 
@@ -112,7 +124,7 @@ impl LivenessAnalysis {
         Self { liveness }
     }
 
-    fn generate_gk_analysis<'tcx>(body: &Body<'tcx>) -> GenKillAnalysis {
+    fn generate_gk_analysis<'tcx>(tcx: TyCtxt<'_>, body: &Body<'tcx>) -> GenKillAnalysis {
         let mut gen_kill = IndexVec::<BasicBlock, GenKill>::from_fn_n(
             |_| GenKill::new(),
             body.basic_blocks.len()
@@ -141,7 +153,7 @@ impl LivenessAnalysis {
 
             // Special GenKill postprocessing step to calculate liveness for checkpoints
             // Not found in typical liveness analysis
-            CheckpointAnalysis::postprocess_gen_kill(body, &bb_data, &mut gen_kill[bb_idx]);
+            CheckpointAnalysis::postprocess_gen_kill(tcx, body, &bb_data, &mut gen_kill[bb_idx]);
         }
 
         GenKillAnalysis { gen_kill }

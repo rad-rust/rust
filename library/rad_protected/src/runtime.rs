@@ -117,6 +117,14 @@ impl Runtime {
             unsafe { libc::printf(nl_fmt); }
         }
     }
+
+
+    // Internal checkpoint marker inserted by AST
+    // Indicates the MIR pass should rewrite the terminator to a `checkpoint` call
+    #[stable(feature = "rad_protected", since = "1.95.0")]
+    #[rustc_diagnostic_item = "__checkpoint"]
+    pub fn __checkpoint() {
+    }
 }
 
 /// Guard to properly drop processes when done with the rad_protected function

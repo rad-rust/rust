@@ -4,8 +4,8 @@ use rustc_data_structures::fx::{FxHashSet, FxIndexMap};
 use rustc_hir::{find_attr, Mutability, LangItem};
 use rustc_middle::mir::{
     Body, Local, LocalKind, Operand, Place, RETURN_PLACE, Rvalue, StatementKind, TerminatorKind,
-    BasicBlock, BasicBlockData, Terminator, SourceInfo, LocalDecl, UnwindAction, CallSource,
-    Statement, CastKind, AggregateKind, ProjectionElem, RawPtrKind, CoercionSource, BorrowKind,
+    BasicBlock, SourceInfo, LocalDecl, Statement, CastKind, AggregateKind, ProjectionElem,
+    RawPtrKind, CoercionSource, BorrowKind,
 };
 use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::print::with_no_trimmed_paths;
@@ -30,7 +30,7 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
             return;
         }
 
-        let checkpoint_analysis = CheckpointAnalysis::analyze(body);
+        let checkpoint_analysis = CheckpointAnalysis::analyze(tcx, body);
 
         eprintln!("=== Liveness analysis for {:?} ===", def_id);
         for (bb_idx, live) in &checkpoint_analysis.checkpoints {
@@ -511,7 +511,7 @@ fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: 
 
         // array[i] = move _3;
         let elem_place = Place::from(array_local).project_deeper(
-            &[ProjectionElem::ConstantIndex { 
+            &[ProjectionElem::ConstantIndex {
                 offset: i as u64,
                 min_length: num_locals,
                 from_end: false
@@ -549,27 +549,22 @@ fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: 
     );
 
     let func = Operand::function_handle(tcx, checkpoint_def_id, [], span);
-    let dest_local = push_local(body, tcx.types.unit);
+    let block_data = &mut body.basic_blocks_mut()[next];
+    block_data.statements.extend(stmts);
 
-    let old_data = body.basic_blocks_mut()[next].clone();
-    let continuation = body.basic_blocks_mut().push(old_data);
+    match &mut block_data.terminator_mut().kind {
+        TerminatorKind::Call { func: callee, args, fn_span, .. } => {
+            *callee = func;
+            *args = Box::new([Spanned { node: Operand::Move(Place::from(slice_ref)), span }]);
+            *fn_span = span;
+        }
+        TerminatorKind::TailCall { func: callee, args, fn_span, .. } => {
+            *callee = func;
+            *args = Box::new([Spanned { node: Operand::Move(Place::from(slice_ref)), span }]);
+            *fn_span = span;
+        }
+        _ => unreachable!(),
+    }
 
-    let terminator = Terminator {
-        source_info,
-        kind: TerminatorKind::Call {
-            func,
-            args: Box::new([
-                Spanned { node: Operand::Move(Place::from(slice_ref)), span },
-            ]),
-            destination: Place::from(dest_local),
-            target: Some(continuation),
-            unwind: UnwindAction::Continue,
-            call_source: CallSource::Misc,
-            fn_span: span,
-        },
-    };
-
-    let new_block = BasicBlockData::new_stmts(stmts, Some(terminator), false);
-    body.basic_blocks_mut()[next] = new_block;
     next
 }

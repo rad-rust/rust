@@ -348,6 +348,7 @@ symbols! {
         Vec,
         Wrapper,
         _DECLS,
+        __checkpoint,
         __guard,
         __H,
         __S,
