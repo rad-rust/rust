@@ -16,7 +16,6 @@ use rustc_data_structures::thousands;
 use rustc_errors::timings::TimingSection;
 use rustc_expand::base::{ExtCtxt, LintStoreExpand};
 use rustc_expand::patch_unsafe::patch_unsafe_blocks;
-use rustc_expand::patch_checkpoints::patch_checkpoints;
 use rustc_feature::Features;
 use rustc_fs_util::try_canonicalize;
 use rustc_hir::attrs::AttributeKind;
@@ -222,7 +221,6 @@ fn configure_and_expand(
         }
 
         patch_unsafe_blocks(&mut ecx, &mut krate);
-        patch_checkpoints(&mut ecx, &mut krate);
 
         // The rest is error reporting and stats
 

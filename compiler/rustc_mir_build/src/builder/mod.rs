@@ -1276,5 +1276,6 @@ mod expr;
 mod matches;
 mod misc;
 mod scope;
+mod checkpoint;
 
 pub(crate) use expr::category::Category as ExprCategory;
