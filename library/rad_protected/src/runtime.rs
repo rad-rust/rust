@@ -12,12 +12,13 @@ impl Runtime {
     /// Triplicate the running process over the current rad_protected function
     /// Fork the running process and copy its memory to create 3 identical processes
     #[stable(feature = "rad_protected", since = "1.95.0")]
-    pub fn triplicate_process() -> Result<ProcessGuard, ()> {
+    #[rustc_diagnostic_item = "triplicate_process"]
+    pub fn triplicate_process(payload_size: usize) -> Result<ProcessGuard, ()> {
         if ROLE.lock().unwrap().as_ref().is_some() {
             return Err(());
         }
 
-        let Ok(shared_memory) = SharedMemory::open() else {
+        let Ok(shared_memory) = SharedMemory::open(payload_size) else {
             return Err(());
         };
 

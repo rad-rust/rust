@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 use rustc_data_structures::{fx::FxHashSet, graph::Successors};
 use rustc_index::{bit_set::DenseBitSet, IndexVec};
 use rustc_span::def_id::DefId;
-use rustc_span::sym;
+use rustc_span::{sym, Symbol};
 use rustc_middle::ty::TyCtxt;
 
 pub(super) struct CheckpointAnalysis {
@@ -35,13 +35,17 @@ impl CheckpointAnalysis {
     }
 
     pub(super) fn is_checkpoint(tcx: TyCtxt<'_>, bb_data: &BasicBlockData<'_>) -> bool {
-        Self::callee_def_id(bb_data).is_some_and(|def_id| tcx.is_diagnostic_item(sym::__checkpoint, def_id))
+        Self::is_call_to(tcx, bb_data, sym::__checkpoint)
+    }
+
+    pub(super) fn is_call_to(tcx: TyCtxt<'_>, bb_data: &BasicBlockData<'_>, symbol: Symbol) -> bool {
+        Self::callee_def_id(bb_data).is_some_and(|def_id| tcx.is_diagnostic_item(symbol, def_id))
     }
 
     fn callee_def_id<'tcx>(bb_data: &BasicBlockData<'tcx>) -> Option<DefId> {
         let func = match &bb_data.terminator().kind {
-            TerminatorKind::Call { func, .. } => func,
-            TerminatorKind::TailCall { func, .. } => func,
+            TerminatorKind::Call { func, .. }
+            | TerminatorKind::TailCall { func, .. } => func,
             _ => return None,
         };
         func.const_fn_def().map(|(def_id, _)| def_id)

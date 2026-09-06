@@ -1,7 +1,7 @@
 //! This pass performs an analysis to determine reference, raw pointer, and unsafe function call accesses that are protected by `#[rad_protected]`
 
 use rustc_data_structures::fx::{FxHashSet, FxIndexMap};
-use rustc_hir::{find_attr, Mutability, LangItem};
+use rustc_hir::{find_attr, Mutability};
 use rustc_middle::mir::{
     Body, Local, LocalKind, Operand, Place, RETURN_PLACE, Rvalue, StatementKind, TerminatorKind,
     BasicBlock, SourceInfo, LocalDecl, Statement, CastKind, AggregateKind, ProjectionElem,
@@ -11,8 +11,9 @@ use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use super::rad_protected_liveness_analysis::{CheckpointAnalysis, LiveLocals};
-use rustc_span::{sym, source_map::Spanned};
+use rustc_span::{sym, Span, source_map::Spanned};
 use rustc_index::IndexVec;
+use rustc_middle::mir::interpret::Scalar;
 
 pub(super) struct RadProtectedAnalysis;
 
@@ -40,10 +41,19 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
         eprintln!("================================");
 
         eprintln!("=== Injecting checkpoints ===");
+
+        let mut max_payload_size: u64 = 0;
+        
         for (bb_idx, live) in checkpoint_analysis.checkpoints {
-            inject_checkpoint_call(tcx, body, live, bb_idx);
+            let payload_size = inject_checkpoint_call(tcx, body, live, bb_idx);
+            max_payload_size = max_payload_size.max(payload_size);
             eprintln!("Successfully injected checkpoint call at {:?}", bb_idx);
         }
+
+        inject_payload_size_arg(tcx, body, max_payload_size)
+            .expect("Failed to find a triplicate_process call to inject payload size");
+        eprintln!("Checkpoint injection complete with payload size of {} bytes", max_payload_size);
+
         eprintln!("================================");
         
         let sources = build_pointer_sources(body);
@@ -445,11 +455,13 @@ fn resolve_pointer_source<'tcx>(
     }
 }
 
-fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: LiveLocals, next: BasicBlock) -> BasicBlock {
+fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: LiveLocals, next: BasicBlock) -> u64 {
     let checkpoint_def_id = tcx.get_diagnostic_item(sym::checkpoint).unwrap();
     let source_info = SourceInfo::outermost(body.span);
     let span = body.span;
     let num_locals = live.locals().len() as u64;
+
+    let mut payload_size: u64 = 0;
 
     let mut stmts: Vec<Statement<'tcx>> = Vec::new();
     let mut push_stmt = |kind: StatementKind<'tcx>| {
@@ -471,7 +483,7 @@ fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: 
     let array_ty = Ty::new_array(tcx, slot_ty, num_locals);
     let array_local = push_local(body, array_ty);
 
-    let size_of_def_id = tcx.require_lang_item(LangItem::SizeOf, span);
+    let typing_env = body.typing_env(tcx);
 
     for (i, &local) in live.locals().iter().enumerate() {
         let local_ty = body.local_decls[local].ty;
@@ -495,11 +507,21 @@ fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: 
             ),
         );
 
-        // size_of::<local_ty>()
-        let size_operand =
-            Operand::unevaluated_constant(tcx, size_of_def_id, &[local_ty.into()], span);
+        let local_size = tcx
+            .layout_of(typing_env.as_query_input(local_ty))
+            .unwrap()
+            .size
+            .bytes();
+        payload_size += local_size;
 
-        // _3 = (_2, size_of::<local_ty>());
+        let size_operand = Operand::const_from_scalar(
+            tcx,
+            tcx.types.usize,
+            Scalar::from_target_usize(local_size.try_into().unwrap(), &tcx),
+            span,
+        );
+
+        // _3 = (_2, local_size);
         let slot_local = push_local(body, slot_ty);
         push_assign(
             Place::from(slot_local),
@@ -552,19 +574,39 @@ fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: 
     let block_data = &mut body.basic_blocks_mut()[next];
     block_data.statements.extend(stmts);
 
-    match &mut block_data.terminator_mut().kind {
-        TerminatorKind::Call { func: callee, args, fn_span, .. } => {
-            *callee = func;
-            *args = Box::new([Spanned { node: Operand::Move(Place::from(slice_ref)), span }]);
-            *fn_span = span;
+    let (callee, args, term_fn_span) = call_terminator_parts_mut(&mut block_data.terminator_mut().kind).unwrap();
+    *callee = func;
+    *args = Box::new([Spanned { node: Operand::Move(Place::from(slice_ref)), span }]);
+    *term_fn_span = span;
+
+    payload_size
+}
+
+fn inject_payload_size_arg<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, max_payload_size: u64) -> Option<()> {
+
+    for bb_data in body.basic_blocks.as_mut().iter_mut() {
+        if CheckpointAnalysis::is_call_to(tcx, bb_data, sym::triplicate_process) {
+            let span = bb_data.terminator().source_info.span;
+            let size_operand = Operand::const_from_scalar(
+                tcx,
+                tcx.types.usize,
+                Scalar::from_target_usize(max_payload_size, &tcx),
+                span,
+            );
+
+            let (_, args, _) = call_terminator_parts_mut(&mut bb_data.terminator_mut().kind).unwrap();
+            *args = Box::new([Spanned { node: size_operand, span }]);
+            return Some(());
         }
-        TerminatorKind::TailCall { func: callee, args, fn_span, .. } => {
-            *callee = func;
-            *args = Box::new([Spanned { node: Operand::Move(Place::from(slice_ref)), span }]);
-            *fn_span = span;
-        }
-        _ => unreachable!(),
     }
 
-    next
+    None
+}
+
+fn call_terminator_parts_mut<'a, 'tcx>(kind: &'a mut TerminatorKind<'tcx>) -> Option<(&'a mut Operand<'tcx>, &'a mut Box<[Spanned<Operand<'tcx>>]>, &'a mut Span)> {
+    match kind {
+        TerminatorKind::Call { func, args, fn_span, .. }
+        | TerminatorKind::TailCall { func, args, fn_span, .. } => Some((func, args, fn_span)),
+        _ => None,
+    }
 }

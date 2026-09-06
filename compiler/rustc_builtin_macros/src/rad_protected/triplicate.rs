@@ -74,7 +74,7 @@ pub(crate) fn triplicate(
                 Ident::new(sym::RadRustRuntime, DUMMY_SP),
                 Ident::new(sym::triplicate_process, DUMMY_SP),
             ], 
-            thin_vec![]
+            thin_vec![cx.expr_usize(DUMMY_SP, 0usize)]
         )
     ));
 
