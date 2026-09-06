@@ -51,6 +51,7 @@ mod lint;
 mod lint_tail_expr_drop_order;
 mod liveness;
 mod patch;
+mod rad_protected_liveness_analysis;
 mod shim;
 mod ssa;
 mod trivial_const;

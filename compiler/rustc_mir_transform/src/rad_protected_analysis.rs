@@ -1,12 +1,19 @@
 //! This pass performs an analysis to determine reference, raw pointer, and unsafe function call accesses that are protected by `#[rad_protected]`
 
 use rustc_data_structures::fx::{FxHashSet, FxIndexMap};
-use rustc_hir::find_attr;
+use rustc_hir::{find_attr, Mutability};
 use rustc_middle::mir::{
     Body, Local, LocalKind, Operand, Place, RETURN_PLACE, Rvalue, StatementKind, TerminatorKind,
+    BasicBlock, SourceInfo, LocalDecl, Statement, CastKind, AggregateKind, ProjectionElem,
+    RawPtrKind, CoercionSource, BorrowKind,
 };
+use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{self, TyCtxt};
+use rustc_middle::ty::{self, Ty, TyCtxt};
+use super::rad_protected_liveness_analysis::{CheckpointAnalysis, LiveLocals};
+use rustc_span::{sym, Span, source_map::Spanned};
+use rustc_index::IndexVec;
+use rustc_middle::mir::interpret::Scalar;
 
 pub(super) struct RadProtectedAnalysis;
 
@@ -22,6 +29,31 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
             return;
         }
 
+        let checkpoint_analysis = CheckpointAnalysis::analyze(tcx, body);
+
+        eprintln!("=== Liveness analysis for {:?} ===", def_id);
+        for (bb_idx, live) in &checkpoint_analysis.checkpoints {
+            eprintln!("Checkpoint {:?}", bb_idx);
+            eprintln!("\tSync: {:?}\n", live.locals());
+        }
+        eprintln!("================================");
+
+        eprintln!("=== Injecting checkpoints ===");
+
+        let mut max_payload_size: u64 = 0;
+        
+        for (bb_idx, live) in checkpoint_analysis.checkpoints {
+            let payload_size = inject_checkpoint_call(tcx, body, live, bb_idx);
+            max_payload_size = max_payload_size.max(payload_size);
+            eprintln!("Successfully injected checkpoint call at {:?}", bb_idx);
+        }
+
+        inject_payload_size_arg(tcx, body, max_payload_size)
+            .expect("Failed to find a triplicate_process call to inject payload size");
+        eprintln!("Checkpoint injection complete with payload size of {} bytes", max_payload_size);
+
+        eprintln!("================================");
+        
         let sources = build_pointer_sources(body);
 
         with_no_trimmed_paths!({
@@ -369,5 +401,161 @@ fn resolve_pointer_source<'tcx>(
                 return "unknown".to_string();
             }
         }
+    }
+}
+
+fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: LiveLocals, next: BasicBlock) -> u64 {
+    let checkpoint_def_id = tcx.get_diagnostic_item(sym::checkpoint).unwrap();
+    let source_info = SourceInfo::outermost(body.span);
+    let span = body.span;
+    let num_locals = live.locals().len() as u64;
+
+    let mut payload_size: u64 = 0;
+
+    let mut stmts: Vec<Statement<'tcx>> = Vec::new();
+    let mut push_stmt = |kind: StatementKind<'tcx>| {
+        stmts.push(Statement::new(source_info, kind));
+    };
+
+    let push_local = |body: &mut Body<'tcx>, ty| {
+        body.local_decls.push(LocalDecl::new(ty, span))
+    };
+
+    let mut push_assign = |place, rvalue| {
+        push_stmt(StatementKind::Assign(Box::new((place, rvalue))));
+    };
+
+    let u8_ptr_ty = Ty::new_ptr(tcx, tcx.types.u8, Mutability::Mut);
+    let slot_ty = Ty::new_tup(tcx, &[u8_ptr_ty, tcx.types.usize]);
+
+    // let array: [(*mut u8, usize); usize];
+    let array_ty = Ty::new_array(tcx, slot_ty, num_locals);
+    let array_local = push_local(body, array_ty);
+
+    let typing_env = body.typing_env(tcx);
+
+    for (i, &local) in live.locals().iter().enumerate() {
+        let local_ty = body.local_decls[local].ty;
+
+        // _1 = &raw mut local;
+        let raw_ptr_ty = Ty::new_ptr(tcx, local_ty, Mutability::Mut);
+        let raw_ptr = push_local(body, raw_ptr_ty);
+        push_assign(
+            Place::from(raw_ptr),
+            Rvalue::RawPtr(RawPtrKind::Mut, Place::from(local)),
+        );
+
+        // _2 = _1 as *mut u8 (PtrToPtr);
+        let u8_ptr = push_local(body, u8_ptr_ty);
+        push_assign(
+            Place::from(u8_ptr),
+            Rvalue::Cast(
+                CastKind::PtrToPtr,
+                Operand::Move(Place::from(raw_ptr)),
+                u8_ptr_ty
+            ),
+        );
+
+        let local_size = tcx
+            .layout_of(typing_env.as_query_input(local_ty))
+            .unwrap()
+            .size
+            .bytes();
+        payload_size += local_size;
+
+        let size_operand = Operand::const_from_scalar(
+            tcx,
+            tcx.types.usize,
+            Scalar::from_target_usize(local_size.try_into().unwrap(), &tcx),
+            span,
+        );
+
+        // _3 = (_2, local_size);
+        let slot_local = push_local(body, slot_ty);
+        push_assign(
+            Place::from(slot_local),
+            Rvalue::Aggregate(
+                Box::new(AggregateKind::Tuple),
+                IndexVec::from_raw(vec![Operand::Move(Place::from(u8_ptr)), size_operand]),
+            ),
+        );
+
+        // array[i] = move _3;
+        let elem_place = Place::from(array_local).project_deeper(
+            &[ProjectionElem::ConstantIndex {
+                offset: i as u64,
+                min_length: num_locals,
+                from_end: false
+            }],
+            tcx,
+        );
+        push_assign(
+            elem_place,
+            Rvalue::Use(Operand::Move(Place::from(slot_local))),
+        );
+    }
+
+    // _1 = &array;
+    let array_ref_ty = Ty::new_imm_ref(tcx, tcx.lifetimes.re_erased, array_ty);
+    let array_ref = push_local(body, array_ref_ty);
+    push_assign(
+        Place::from(array_ref),
+        Rvalue::Ref(tcx.lifetimes.re_erased, BorrowKind::Shared, Place::from(array_local)),
+    );
+
+    // _2 = move _1 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+    let slice_ty = Ty::new_slice(tcx, slot_ty);
+    let slice_ref_ty = Ty::new_imm_ref(tcx, tcx.lifetimes.re_erased, slice_ty);
+    let slice_ref = push_local(body, slice_ref_ty);
+    push_assign(
+        Place::from(slice_ref),
+        Rvalue::Cast(
+            CastKind::PointerCoercion(
+                PointerCoercion::Unsize,
+                CoercionSource::Implicit
+            ),
+            Operand::Move(Place::from(array_ref)),
+            slice_ref_ty,
+        ),
+    );
+
+    let func = Operand::function_handle(tcx, checkpoint_def_id, [], span);
+    let block_data = &mut body.basic_blocks_mut()[next];
+    block_data.statements.extend(stmts);
+
+    let (callee, args, term_fn_span) = call_terminator_parts_mut(&mut block_data.terminator_mut().kind).unwrap();
+    *callee = func;
+    *args = Box::new([Spanned { node: Operand::Move(Place::from(slice_ref)), span }]);
+    *term_fn_span = span;
+
+    payload_size
+}
+
+fn inject_payload_size_arg<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, max_payload_size: u64) -> Option<()> {
+
+    for bb_data in body.basic_blocks.as_mut().iter_mut() {
+        if CheckpointAnalysis::is_call_to(tcx, bb_data, sym::triplicate_process) {
+            let span = bb_data.terminator().source_info.span;
+            let size_operand = Operand::const_from_scalar(
+                tcx,
+                tcx.types.usize,
+                Scalar::from_target_usize(max_payload_size, &tcx),
+                span,
+            );
+
+            let (_, args, _) = call_terminator_parts_mut(&mut bb_data.terminator_mut().kind).unwrap();
+            *args = Box::new([Spanned { node: size_operand, span }]);
+            return Some(());
+        }
+    }
+
+    None
+}
+
+fn call_terminator_parts_mut<'a, 'tcx>(kind: &'a mut TerminatorKind<'tcx>) -> Option<(&'a mut Operand<'tcx>, &'a mut Box<[Spanned<Operand<'tcx>>]>, &'a mut Span)> {
+    match kind {
+        TerminatorKind::Call { func, args, fn_span, .. }
+        | TerminatorKind::TailCall { func, args, fn_span, .. } => Some((func, args, fn_span)),
+        _ => None,
     }
 }

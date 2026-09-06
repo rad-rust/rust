@@ -1789,6 +1789,14 @@ pub(crate) mod builtin {
         /* compiler built-in */
     }
 
+
+    /// Attribute macro that implements radiation hardening through triplication
+    #[stable(feature = "rad_protected", since = "1.95.0")]
+    #[rustc_builtin_macro]
+    pub macro rad_protected($item:item) {
+        /* compiler built-in */
+    }
+
     /// Attribute macro applied to a function to give it a post-condition.
     ///
     /// The attribute carries an argument token-tree which is
