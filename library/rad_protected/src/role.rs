@@ -20,7 +20,7 @@ pub struct Parent {
 impl Parent {
     pub(super) fn new(shared_memory: SharedMemory, child1: ChildLink, child2: ChildLink) -> Self {
         Self {
-            shared_mem_ctx: SharedMemoryContext::new(shared_memory),
+            shared_mem_ctx: SharedMemoryContext::new(shared_memory, 0),
             child1,
             child2
         }
@@ -42,9 +42,9 @@ pub struct Child {
 }
 
 impl Child {
-    pub(super) fn new(shared_memory: SharedMemory) -> Self {
+    pub(super) fn new(shared_memory: SharedMemory, first: bool) -> Self {
         Self {
-            shared_mem_ctx: SharedMemoryContext::new(shared_memory), 
+            shared_mem_ctx: SharedMemoryContext::new(shared_memory, if first { 1 } else { 2 }), 
         }
     }
 }
@@ -53,15 +53,24 @@ impl Child {
 pub(super) struct SharedMemoryContext {
     shared_memory: SharedMemory, 
     leader_depth: u32,
+    index: u32,
 }
 
 impl SharedMemoryContext {
-    pub(super) fn new(shared_memory: SharedMemory) -> Self {
-        Self { shared_memory, leader_depth: 0 }
+    pub(super) fn new(shared_memory: SharedMemory, index: u32) -> Self {
+        Self { shared_memory, leader_depth: 0, index }
     }
 
     pub(super) fn sync(&self) -> bool {
         self.shared_memory.sync()
+    }
+
+    pub(super) fn get_slot(&self, slot: u32) -> *mut u8 {
+        self.shared_memory.get_slot(slot)
+    }
+
+    pub(super) fn this_slot(&self) -> *mut u8 {
+        self.get_slot(self.index)
     }
 
     pub(super) fn enter_critical_section(&mut self) -> bool {

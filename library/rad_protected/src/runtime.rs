@@ -1,6 +1,7 @@
 use super::fork::{fork_copy, ForkOutcome};
 use super::role::{ROLE, Role, Parent, Child};
 use super::shared_memory::SharedMemory;
+use core::ptr;
 
 /// Runtime for rad_protected
 #[stable(feature = "rad_protected", since = "1.95.0")]
@@ -25,7 +26,7 @@ impl Runtime {
         let link1 = match fork_copy() {
             Some(ForkOutcome::Parent(link1)) => link1,
             Some(ForkOutcome::Child) => {
-                ROLE.lock().unwrap().replace(Role::Child(Child::new(shared_memory)));
+                ROLE.lock().unwrap().replace(Role::Child(Child::new(shared_memory, true)));
                 return Ok(ProcessGuard{});
             }
             None => { 
@@ -37,7 +38,7 @@ impl Runtime {
         let link2 = match fork_copy() {
             Some(ForkOutcome::Parent(link2)) => link2,
             Some(ForkOutcome::Child) => {
-                ROLE.lock().unwrap().replace(Role::Child(Child::new(shared_memory)));
+                ROLE.lock().unwrap().replace(Role::Child(Child::new(shared_memory, false)));
                 return Ok(ProcessGuard{});
             }
             None => {
@@ -101,24 +102,50 @@ impl Runtime {
             return;
         }
 
-        let hex_fmt = b"%02x \0".as_ptr() as *const libc::c_char;
-        let nl_fmt = b"\n\0".as_ptr() as *const libc::c_char;
+        let mut guard = ROLE.lock().unwrap();
 
-        for i in 0..locals.len() {
-            let (buf_ptr, buf_len) = locals[i];
+        let Some(role) = guard.as_mut() else {
+            return;
+        };
 
-            if buf_ptr.is_null() || buf_len == 0 {
-                continue;
+        let mut slot = role.ctx().this_slot();
+
+        for &(local_ptr, size) in locals {
+            unsafe {
+                ptr::copy_nonoverlapping(local_ptr, slot, size);
+                slot = slot.add(size);
             }
-
-            for j in 0..buf_len {
-                let byte = unsafe { *buf_ptr.add(j) };
-                unsafe { libc::printf(hex_fmt, byte as libc::c_int); }
-            }
-            unsafe { libc::printf(nl_fmt); }
         }
+
+        role.ctx().sync();
+
+        let a = role.ctx().get_slot(0);
+        let b = role.ctx().get_slot(1);
+        let c = role.ctx().get_slot(2);
+
+        let mut offset = 0;
+        for &(local_ptr, size) in locals {
+            unsafe {
+                for i in 0..size {
+                    let voted = Self::bitwise_majority_vote(a, b, c, offset + i);
+                    local_ptr.add(i).write(voted);
+                }
+            }
+            offset += size;
+        }
+
+        role.ctx().sync();
     }
 
+    fn bitwise_majority_vote(a: *mut u8, b: *mut u8, c: *mut u8, offset: usize) -> u8 {
+        unsafe {
+            let a_byte = a.add(offset).read();
+            let b_byte = b.add(offset).read();
+            let c_byte = c.add(offset).read();
+
+            (a_byte & b_byte) | (a_byte & c_byte) | (b_byte & c_byte)
+        }
+    }
 
     // Internal checkpoint marker inserted during MIR building
     // Indicates the MIR pass should rewrite the terminator to a `checkpoint` call

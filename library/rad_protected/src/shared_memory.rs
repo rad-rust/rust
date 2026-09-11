@@ -15,14 +15,14 @@ impl SharedMemoryHeader {
 #[derive(Debug)]
 pub(super) struct SharedMemory {
     header: *mut SharedMemoryHeader,
-    _payload: *mut u8,
-    size: usize,
+    payload: *mut u8,
+    slot_size: usize,
 }
 
 impl SharedMemory {
-    pub(super) fn open(payload_size: usize) -> io::Result<Self> {
+    pub(super) fn open(slot_size: usize) -> io::Result<Self> {
         let header_size = size_of::<SharedMemoryHeader>();
-        let size = header_size + (payload_size * 3);
+        let size = Self::calculate_size(slot_size);
 
         let ptr = shared_mmap(size)? as *mut u8;
 
@@ -37,12 +37,23 @@ impl SharedMemory {
             );
         }
 
-        Ok(Self { header, _payload: payload, size })
+        Ok(Self { header, payload, slot_size })
     }
 
     pub(super) fn close(&self) {
         unsafe { ptr::drop_in_place(self.header); }
-        munmap(self.header as *mut _, self.size);
+        munmap(self.header as *mut _, Self::calculate_size(self.slot_size));
+    }
+
+    pub(super) fn get_slot(&self, slot: u32) -> *mut u8 {
+        assert!(slot <= 2);
+        unsafe {
+            self.payload.add((slot as usize) * self.slot_size)
+        }
+    }
+
+    fn calculate_size(slot_size: usize) -> usize {
+        size_of::<SharedMemoryHeader>() + (slot_size * 3)
     }
 }
 
