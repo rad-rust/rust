@@ -8,7 +8,7 @@ use super::Builder;
 
 impl<'a, 'tcx> Builder<'a, 'tcx> {
     pub(super) fn inject_checkpoint_marker(&mut self, block: BasicBlock, span: Span) -> BasicBlock {
-        if !Self::is_checkpoint(self.tcx, self.def_id) {
+        if !Self::has_rad_protected(self.tcx, self.def_id) {
             return block;
         }
 
@@ -38,7 +38,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         next
     }
 
-    fn is_checkpoint(tcx: TyCtxt<'_>, def_id: LocalDefId) -> bool {
+    fn has_rad_protected(tcx: TyCtxt<'_>, def_id: LocalDefId) -> bool {
         find_attr!(tcx, def_id, RadProtected(_))
     }
 }
