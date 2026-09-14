@@ -449,6 +449,10 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 }
             }
             ExprKind::Call { ty: _, fun, ref args, from_hir_call, fn_span } => {
+                if from_hir_call {
+                    block = this.inject_checkpoint_marker(block, fn_span);
+                }
+
                 let fun = unpack!(block = this.as_local_operand(block, fun));
                 let args: Box<[_]> = args
                     .into_iter()

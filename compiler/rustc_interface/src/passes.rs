@@ -15,6 +15,7 @@ use rustc_data_structures::sync::{AppendOnlyIndexVec, FreezeLock, WorkerLocal, p
 use rustc_data_structures::thousands;
 use rustc_errors::timings::TimingSection;
 use rustc_expand::base::{ExtCtxt, LintStoreExpand};
+use rustc_expand::patch_unsafe::patch_unsafe_blocks;
 use rustc_feature::Features;
 use rustc_fs_util::try_canonicalize;
 use rustc_hir::attrs::AttributeKind;
@@ -213,11 +214,13 @@ fn configure_and_expand(
         let mut ecx = ExtCtxt::new(sess, cfg, resolver, Some(&lint_store));
         ecx.num_standard_library_imports = num_standard_library_imports;
         // Expand macros now!
-        let krate = sess.time("expand_crate", || ecx.monotonic_expander().expand_crate(krate));
+        let mut krate = sess.time("expand_crate", || ecx.monotonic_expander().expand_crate(krate));
 
         if ecx.nb_macro_errors > 0 {
             sess.dcx().abort_if_errors();
         }
+
+        patch_unsafe_blocks(&mut ecx, &mut krate);
 
         // The rest is error reporting and stats
 

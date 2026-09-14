@@ -541,6 +541,9 @@ fn construct_fn<'tcx>(
             })
             .into_block();
         let source_info = builder.source_info(fn_end);
+
+        let return_block  = builder.inject_checkpoint_marker(return_block, fn_end);
+
         builder.cfg.terminate(return_block, source_info, TerminatorKind::Return);
         builder.build_drop_trees();
         return_block.unit()
@@ -1276,5 +1279,6 @@ mod expr;
 mod matches;
 mod misc;
 mod scope;
+mod checkpoint;
 
 pub(crate) use expr::category::Category as ExprCategory;
