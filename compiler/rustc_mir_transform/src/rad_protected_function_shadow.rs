@@ -14,7 +14,8 @@
 //! ```ignore (illustrative)
 //! fn update(state: &mut State) {
 //!     let original = state;
-//!     let mut shadow = *original;      // eager copy of the whole state
+//!     let mut shadow: State;
+//!     shadow.position.x = original.position.x;   // copy in only what the body uses
 //!     {
 //!         let state = &mut shadow;     // the body now runs on the shadow
 //!         state.position.x += 1;
@@ -24,8 +25,9 @@
 //! ```
 //!
 //! The body never touches the caller's `State`, so the original stays intact and available for a
-//! rollback, and only the fields the body may write are copied back. `position.y` and `counter`
-//! are left alone.
+//! rollback. Only the fields the body uses are copied in, and only the fields it may write are
+//! copied back. `position.y` and `counter` are left alone, and stay uninitialized in the shadow:
+//! the body never reads them, and `State: Copy`, so nothing drops them either.
 //!
 //! The redirection is done by rebinding the argument local itself. The body already reaches the
 //! state through `_1`, so after `_1 = &mut _shadow` the very same MIR `Place` `(*_1).position.x`
@@ -48,14 +50,16 @@
 
 use rustc_data_structures::fx::{FxHashSet, FxIndexSet};
 use rustc_hir::{Mutability, find_attr};
-use rustc_middle::mir::visit::{MutatingUseContext, PlaceContext, Visitor};
+use rustc_middle::mir::visit::{MutatingUseContext, NonMutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
     BasicBlockData, Body, BorrowKind, Local, LocalDecl, Location, MutBorrowKind, Operand, Place,
-    PlaceElem, ProjectionElem, RETURN_PLACE, Rvalue, START_BLOCK, SourceInfo, Statement,
+    PlaceElem, PlaceTy, ProjectionElem, RETURN_PLACE, Rvalue, START_BLOCK, SourceInfo, Statement,
     StatementKind, Terminator, TerminatorKind,
 };
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, List, Ty, TyCtxt, TypingEnv};
+
+use super::rad_protected_places::{DerefPolicy, canonicalize};
 
 pub(super) struct RadProtectedFunctionShadow;
 
@@ -83,8 +87,8 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedFunctionShadow {
                 }
             };
 
-            let dirty = match BodyScan::run(tcx, body, arg.local) {
-                Ok(dirty) => dirty,
+            let sets = match BodyScan::run(tcx, body, arg.local) {
+                Ok(sets) => sets,
                 Err(reason) => {
                     eprintln!("not shadowed: {reason}");
                     eprintln!("================================");
@@ -92,23 +96,42 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedFunctionShadow {
                 }
             };
 
-            if dirty.is_empty() {
+            if sets.commit.is_empty() {
                 eprintln!("not shadowed: the body never writes through {:?}", arg.local);
                 eprintln!("================================");
                 return;
             }
 
-            let locals = apply(tcx, body, &arg, &dirty);
+            let locals = apply(tcx, body, &arg, &sets);
 
             eprintln!("shadowed argument: {:?}: &mut {}", arg.local, arg.pointee);
             eprintln!("original: {:?}, shadow: {:?}", locals.original, locals.shadow);
+            eprintln!("copy-in set:");
+            for proj in &sets.copy {
+                eprintln!(
+                    "\t{:?} = copy {:?}",
+                    Place { local: locals.shadow, projection: proj },
+                    original_place(tcx, locals.original, proj)
+                );
+            }
             eprintln!("may-dirty commit set:");
-            for proj in &dirty {
+            for proj in &sets.commit {
                 eprintln!(
                     "\t{:?} = copy {:?}",
                     original_place(tcx, locals.original, proj),
                     Place { local: locals.shadow, projection: proj }
                 );
+            }
+            let typing_env = body.typing_env(tcx);
+            let size_of = |proj| {
+                let ty = PlaceTy::from_ty(arg.pointee).multi_projection_ty(tcx, proj).ty;
+                tcx.layout_of(typing_env.as_query_input(ty)).ok().map(|layout| layout.size.bytes())
+            };
+            // `sets.copy` is narrowed to outermost projections, so no byte is counted twice.
+            let copied = sets.copy.iter().map(|proj| size_of(proj)).sum::<Option<u64>>();
+            match (copied, size_of(List::empty())) {
+                (Some(copied), Some(total)) => eprintln!("copied {copied} of {total} bytes"),
+                _ => eprintln!("copied ? of ? bytes: layout unavailable"),
             }
             eprintln!("================================");
         });
@@ -369,71 +392,131 @@ impl<'tcx> ReachesPointer<'tcx> {
     }
 }
 
-/// Walks the original body to collect the compile-time may-dirty set and to reject bodies whose
-/// writes the set would not describe faithfully.
-struct BodyScan<'tcx> {
+/// The two sets of projections the transformation is built from, both narrowed to their outermost
+/// entries and both *relative to the pointee*.
+struct ShadowSets<'tcx> {
+    /// Everything the body uses through `*_1`: copied into the shadow before the body runs.
+    copy: Vec<&'tcx List<PlaceElem<'tcx>>>,
+    /// Everything the body may write through `*_1`: copied back at every `Return`.
+    commit: Vec<&'tcx List<PlaceElem<'tcx>>>,
+}
+
+/// Walks the original body to collect the copy-in and may-dirty commit sets and to reject bodies
+/// whose uses the sets would not describe faithfully.
+struct BodyScan<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
+    body: &'a Body<'tcx>,
+    typing_env: TypingEnv<'tcx>,
     arg: Local,
     /// Projections *relative to the pointee*: `(*_1).position.x` is recorded as `.position.x`, so
     /// the same projection can be rebased onto both the shadow local and the saved original.
-    dirty: FxIndexSet<&'tcx List<PlaceElem<'tcx>>>,
+    ///
+    /// Every use: reads, shared borrows, and writes.
+    copy_set: FxIndexSet<&'tcx List<PlaceElem<'tcx>>>,
+    /// Writes only. Always a subset of `copy_set`: the commit copies back unconditionally, so a
+    /// field written on only some paths, or a region widened past what was written, has to hold
+    /// the original value rather than uninitialized memory.
+    commit_set: FxIndexSet<&'tcx List<PlaceElem<'tcx>>>,
+    /// A `FakeRead` exists only for borrowck and reads nothing at runtime.
+    in_fake_read: bool,
     rejected: Option<String>,
 }
 
-impl<'tcx> BodyScan<'tcx> {
+impl<'a, 'tcx> BodyScan<'a, 'tcx> {
     fn run(
         tcx: TyCtxt<'tcx>,
-        body: &Body<'tcx>,
+        body: &'a Body<'tcx>,
         arg: Local,
-    ) -> Result<Vec<&'tcx List<PlaceElem<'tcx>>>, String> {
-        let mut scan = Self { tcx, arg, dirty: FxIndexSet::default(), rejected: None };
+    ) -> Result<ShadowSets<'tcx>, String> {
+        let mut scan = Self {
+            tcx,
+            body,
+            typing_env: body.typing_env(tcx),
+            arg,
+            copy_set: FxIndexSet::default(),
+            commit_set: FxIndexSet::default(),
+            in_fake_read: false,
+            rejected: None,
+        };
         scan.visit_body(body);
 
         if let Some(reason) = scan.rejected {
             return Err(reason);
         }
 
-        Ok(narrow_to_outermost(scan.dirty))
+        let sets = ShadowSets {
+            copy: narrow_to_outermost(scan.copy_set),
+            commit: narrow_to_outermost(scan.commit_set),
+        };
+        debug_assert!(
+            sets.commit
+                .iter()
+                .all(|commit| sets.copy.iter().any(|copy| is_prefix_of(copy, commit))),
+            "commit set {:?} is not covered by copy set {:?}",
+            sets.commit,
+            sets.copy,
+        );
+        Ok(sets)
     }
 
     fn reject(&mut self, reason: String) {
         self.rejected.get_or_insert(reason);
     }
 
-    fn record_write(&mut self, place: Place<'tcx>) {
-        if place.local != self.arg {
+    /// Records a use of `place`, which is rooted at `*_1`.
+    fn record(&mut self, place: Place<'tcx>, context: PlaceContext) {
+        // Places that aren't actual runtime reads/writes, as in the liveness analysis.
+        if self.in_fake_read
+            || matches!(
+                context,
+                PlaceContext::NonUse(_)
+                    | PlaceContext::NonMutatingUse(NonMutatingUseContext::FakeBorrow)
+            )
+        {
             return;
         }
 
-        // `visit_place` already rejects any use of the argument that is not through `*_1`.
-        if let Some(projection) = self.relative_projection(place) {
-            self.dirty.insert(projection);
+        let projection = self.relative_projection(place);
+        if is_write(context) {
+            self.commit_set.insert(projection);
         }
+        self.copy_set.insert(projection);
     }
 
-    /// The part of `place`'s projection that applies to the pointee, cut off at the first element
-    /// the commit cannot spell as a fixed field path.
+    /// The part of `place`'s canonical projection that applies to the pointee.
     ///
-    /// Truncating *widens* the committed region — `(*_1).samples[i] = v` commits the whole
-    /// `samples` array — which keeps the set conservative rather than unsound.
-    fn relative_projection(&self, place: Place<'tcx>) -> Option<&'tcx List<PlaceElem<'tcx>>> {
-        let [ProjectionElem::Deref, rest @ ..] = &place.projection[..] else {
-            return None;
-        };
-
-        let fields =
-            rest.iter().take_while(|elem| matches!(elem, ProjectionElem::Field(..))).count();
-        Some(self.tcx.mk_place_elems(&rest[..fields]))
+    /// Canonicalization *widens* the region to the longest prefix it can spell as a fixed, sized
+    /// path - `(*_1).samples[i] = v` records the whole `samples` array - which keeps both sets
+    /// conservative rather than unsound.
+    fn relative_projection(&self, place: Place<'tcx>) -> &'tcx List<PlaceElem<'tcx>> {
+        let canonical = canonicalize(
+            self.tcx,
+            self.body,
+            self.typing_env,
+            place,
+            DerefPolicy::StopAtInnerDeref,
+        );
+        match canonical.as_ref().map(|canonical| &canonical.projection[..]) {
+            Some([ProjectionElem::Deref, rest @ ..]) => self.tcx.mk_place_elems(rest),
+            // `T` is sized, so `*_1` always survives canonicalization; stay conservative anyway
+            // and treat anything else as a use of the whole pointee.
+            _ => List::empty(),
+        }
     }
 }
 
-impl<'tcx> Visitor<'tcx> for BodyScan<'tcx> {
+impl<'a, 'tcx> Visitor<'tcx> for BodyScan<'a, 'tcx> {
+    fn visit_statement(&mut self, statement: &Statement<'tcx>, location: Location) {
+        // Still walked rather than skipped, so the rejection rules below see it as before.
+        self.in_fake_read = matches!(statement.kind, StatementKind::FakeRead(..));
+        self.super_statement(statement, location);
+        self.in_fake_read = false;
+    }
+
     fn visit_place(&mut self, place: &Place<'tcx>, context: PlaceContext, location: Location) {
         if place.local == self.arg {
             if matches!(place.projection.first(), Some(ProjectionElem::Deref)) {
-                if is_write(context) {
-                    self.record_write(*place);
-                }
+                self.record(*place, context);
             } else if context.is_use() {
                 // Rebinding `_1` redirects the body only where it reads *through* `_1`. A copy or
                 // move of the reference itself would create an alias whose writes this scan does
@@ -495,18 +578,17 @@ fn is_write(context: PlaceContext) -> bool {
 }
 
 /// Drops every projection that a shorter one already covers, so that
-/// `[.position, .position.x]` commits `.position` once instead of writing the parent and then a
-/// field of it.
+/// `[.position, .position.x]` copies `.position` once instead of writing the parent and then a
+/// field of it. The empty projection covers everything, which gives the whole-value copy.
 fn narrow_to_outermost<'tcx>(
-    dirty: FxIndexSet<&'tcx List<PlaceElem<'tcx>>>,
+    set: FxIndexSet<&'tcx List<PlaceElem<'tcx>>>,
 ) -> Vec<&'tcx List<PlaceElem<'tcx>>> {
     // `FxIndexSet` is insertion-ordered, so the result follows the deterministic walk order of the
     // body rather than a hash order.
-    dirty
-        .iter()
+    set.iter()
         .copied()
         .filter(|projection| {
-            !dirty.iter().any(|other| *other != *projection && is_prefix_of(other, projection))
+            !set.iter().any(|other| *other != *projection && is_prefix_of(other, projection))
         })
         .collect()
 }
@@ -522,7 +604,7 @@ struct ShadowLocals {
     shadow: Local,
 }
 
-/// `(*_original).<projection>`, the commit destination for one may-dirty projection.
+/// `(*_original).<projection>`: the copy-in source, and the commit destination, for one projection.
 fn original_place<'tcx>(
     tcx: TyCtxt<'tcx>,
     original: Local,
@@ -537,7 +619,7 @@ fn apply<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &mut Body<'tcx>,
     arg: &ShadowedArg<'tcx>,
-    dirty: &[&'tcx List<PlaceElem<'tcx>>],
+    sets: &ShadowSets<'tcx>,
 ) -> ShadowLocals {
     let span = body.span;
     let source_info = SourceInfo::outermost(span);
@@ -553,16 +635,20 @@ fn apply<'tcx>(
     // The argument local is rebound below, so it has to be a mutable slot.
     body.local_decls[arg.local].mutability = Mutability::Mut;
 
-    let setup = vec![
+    let mut setup = vec![
         // _original = move _1;
         assign(Place::from(original), Rvalue::Use(Operand::Move(Place::from(arg.local)))),
-        // _shadow = copy (*_original);
+    ];
+    // _shadow.<p> = copy (*_original).<p>; for each copy-in projection, or the single
+    // `_shadow = copy (*_original)` when the body uses the whole pointee. Fields outside the copy
+    // set stay uninitialized: the body never reads them, and `T: Copy`, so nothing drops them.
+    setup.extend(sets.copy.iter().map(|projection| {
         assign(
-            Place::from(shadow),
-            Rvalue::Use(Operand::Copy(
-                Place::from(original).project_deeper(&[ProjectionElem::Deref], tcx),
-            )),
-        ),
+            Place { local: shadow, projection },
+            Rvalue::Use(Operand::Copy(original_place(tcx, original, projection))),
+        )
+    }));
+    setup.extend([
         // _shadow_ref = &mut _shadow;
         assign(
             Place::from(shadow_ref),
@@ -574,7 +660,7 @@ fn apply<'tcx>(
         ),
         // _1 = move _shadow_ref; from here the body's own `(*_1)...` places reach the shadow.
         assign(Place::from(arg.local), Rvalue::Use(Operand::Move(Place::from(shadow_ref)))),
-    ];
+    ]);
 
     // The start block must stay predecessor-free, so the original entry block is moved aside and
     // the setup takes its place.
@@ -589,7 +675,8 @@ fn apply<'tcx>(
     // TODO(voting): the comparison/voting layer will decide whether the shadow is committed or
     // discarded. Until it exists this baseline always commits, and an unwind out of the body
     // still commits nothing, leaving the caller's state as it was.
-    let commit: Vec<Statement<'tcx>> = dirty
+    let commit: Vec<Statement<'tcx>> = sets
+        .commit
         .iter()
         .map(|projection| {
             assign(
