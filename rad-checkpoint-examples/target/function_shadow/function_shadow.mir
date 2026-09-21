@@ -1,0 +1,4542 @@
+// WARNING: This output format is intended for human consumers only
+// and is subject to change without notice. Knock yourself out.
+// HINT: See also -Z dump-mir for MIR at specific points during compilation.
+fn <impl at function_shadow.rs:31:10: 31:15>::clone(_1: &Position) -> Position {
+    debug self => _1;
+    let mut _0: Position;
+    scope 1 {
+    }
+
+    bb0: {
+        _0 = copy (*_1);
+        return;
+    }
+}
+
+fn <impl at function_shadow.rs:31:23: 31:28>::fmt(_1: &Position, _2: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+    debug self => _1;
+    debug f => _2;
+    let mut _0: core::result::Result<(), core::fmt::Error>;
+    let mut _3: &str;
+    let mut _4: &str;
+    let mut _5: &dyn core::fmt::Debug;
+    let _6: &u32;
+    let mut _7: &str;
+    let mut _8: &dyn core::fmt::Debug;
+    let _9: &&u32;
+    let _10: &u32;
+
+    bb0: {
+        _3 = const "Position";
+        _4 = const "x";
+        _6 = &((*_1).0: u32);
+        _5 = copy _6 as &dyn core::fmt::Debug (PointerCoercion(Unsize, Implicit));
+        _7 = const "y";
+        _10 = &((*_1).1: u32);
+        _9 = &_10;
+        _8 = copy _9 as &dyn core::fmt::Debug (PointerCoercion(Unsize, Implicit));
+        _0 = Formatter::<'_>::debug_struct_field2_finish(copy _2, move _3, move _4, move _5, move _7, move _8) -> [return: bb1, unwind continue];
+    }
+
+    bb1: {
+        return;
+    }
+}
+
+alloc3 (size: 1, align: 1) {
+    79                                              │ y
+}
+
+alloc2 (size: 1, align: 1) {
+    78                                              │ x
+}
+
+alloc1 (size: 8, align: 1) {
+    50 6f 73 69 74 69 6f 6e                         │ Position
+}
+
+fn <impl at function_shadow.rs:31:30: 31:39>::eq(_1: &Position, _2: &Position) -> bool {
+    debug self => _1;
+    debug other => _2;
+    let mut _0: bool;
+    let mut _3: bool;
+    let mut _4: u32;
+    let mut _5: u32;
+    let mut _6: u32;
+    let mut _7: u32;
+
+    bb0: {
+        _4 = copy ((*_1).0: u32);
+        _5 = copy ((*_2).0: u32);
+        _3 = Eq(move _4, move _5);
+        switchInt(move _3) -> [0: bb2, otherwise: bb1];
+    }
+
+    bb1: {
+        _6 = copy ((*_1).1: u32);
+        _7 = copy ((*_2).1: u32);
+        _0 = Eq(move _6, move _7);
+        goto -> bb3;
+    }
+
+    bb2: {
+        _0 = const false;
+        goto -> bb3;
+    }
+
+    bb3: {
+        return;
+    }
+}
+
+const State::samples::{constant#0}: usize = const 4_usize;
+
+fn <impl at function_shadow.rs:37:10: 37:15>::clone(_1: &State) -> State {
+    debug self => _1;
+    let mut _0: State;
+    scope 1 {
+        scope 2 {
+            scope 3 {
+            }
+        }
+    }
+
+    bb0: {
+        _0 = copy (*_1);
+        return;
+    }
+}
+
+const <impl at function_shadow.rs:37:10: 37:15>::clone::{constant#0}: usize = const 4_usize;
+
+fn <impl at function_shadow.rs:37:23: 37:28>::fmt(_1: &State, _2: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+    debug self => _1;
+    debug f => _2;
+    let mut _0: core::result::Result<(), core::fmt::Error>;
+    let mut _3: &str;
+    let mut _4: &str;
+    let mut _5: &dyn core::fmt::Debug;
+    let _6: &Position;
+    let mut _7: &str;
+    let mut _8: &dyn core::fmt::Debug;
+    let _9: &u32;
+    let mut _10: &str;
+    let mut _11: &dyn core::fmt::Debug;
+    let _12: &&[u32; 4];
+    let _13: &[u32; 4];
+
+    bb0: {
+        _3 = const "State";
+        _4 = const "position";
+        _6 = &((*_1).0: Position);
+        _5 = copy _6 as &dyn core::fmt::Debug (PointerCoercion(Unsize, Implicit));
+        _7 = const "counter";
+        _9 = &((*_1).1: u32);
+        _8 = copy _9 as &dyn core::fmt::Debug (PointerCoercion(Unsize, Implicit));
+        _10 = const "samples";
+        _13 = &((*_1).2: [u32; 4]);
+        _12 = &_13;
+        _11 = copy _12 as &dyn core::fmt::Debug (PointerCoercion(Unsize, Implicit));
+        _0 = Formatter::<'_>::debug_struct_field3_finish(copy _2, move _3, move _4, move _5, move _7, move _8, move _10, move _11) -> [return: bb1, unwind continue];
+    }
+
+    bb1: {
+        return;
+    }
+}
+
+alloc7 (size: 7, align: 1) {
+    73 61 6d 70 6c 65 73                            │ samples
+}
+
+alloc6 (size: 7, align: 1) {
+    63 6f 75 6e 74 65 72                            │ counter
+}
+
+alloc5 (size: 8, align: 1) {
+    70 6f 73 69 74 69 6f 6e                         │ position
+}
+
+alloc4 (size: 5, align: 1) {
+    53 74 61 74 65                                  │ State
+}
+
+fn <impl at function_shadow.rs:37:30: 37:39>::eq(_1: &State, _2: &State) -> bool {
+    debug self => _1;
+    debug other => _2;
+    let mut _0: bool;
+    let mut _3: bool;
+    let mut _4: u32;
+    let mut _5: u32;
+    let mut _6: bool;
+    let mut _7: &Position;
+    let mut _8: &Position;
+    let mut _9: &[u32; 4];
+    let mut _10: &[u32; 4];
+
+    bb0: {
+        _4 = copy ((*_1).1: u32);
+        _5 = copy ((*_2).1: u32);
+        _3 = Eq(move _4, move _5);
+        switchInt(move _3) -> [0: bb4, otherwise: bb1];
+    }
+
+    bb1: {
+        _7 = &((*_1).0: Position);
+        _8 = &((*_2).0: Position);
+        _6 = <Position as PartialEq>::eq(move _7, move _8) -> [return: bb2, unwind continue];
+    }
+
+    bb2: {
+        switchInt(move _6) -> [0: bb4, otherwise: bb3];
+    }
+
+    bb3: {
+        _9 = &((*_1).2: [u32; 4]);
+        _10 = &((*_2).2: [u32; 4]);
+        _0 = <[u32; 4] as PartialEq>::eq(move _9, move _10) -> [return: bb5, unwind continue];
+    }
+
+    bb4: {
+        _0 = const false;
+        goto -> bb5;
+    }
+
+    bb5: {
+        return;
+    }
+}
+
+fn <impl at function_shadow.rs:49:1: 49:20>::drop(_1: &mut Owned) -> () {
+    debug self => _1;
+    let mut _0: ();
+
+    bb0: {
+        return;
+    }
+}
+
+fn <impl at function_shadow.rs:54:10: 54:15>::clone(_1: &WithPtr) -> WithPtr {
+    debug self => _1;
+    let mut _0: WithPtr;
+    scope 1 {
+        scope 2 {
+        }
+    }
+
+    bb0: {
+        _0 = copy (*_1);
+        return;
+    }
+}
+
+fn <impl at function_shadow.rs:62:10: 62:15>::clone(_1: &Nested) -> Nested {
+    debug self => _1;
+    let mut _0: Nested;
+    scope 1 {
+    }
+
+    bb0: {
+        _0 = copy (*_1);
+        return;
+    }
+}
+
+fn <impl at function_shadow.rs:68:10: 68:15>::clone(_1: &WithShared<'_>) -> WithShared<'_> {
+    debug self => _1;
+    let mut _0: WithShared<'_>;
+    scope 1 {
+        scope 2 {
+        }
+    }
+
+    bb0: {
+        _0 = copy (*_1);
+        return;
+    }
+}
+
+fn <impl at function_shadow.rs:75:10: 75:15>::clone(_1: &WithCell<'_>) -> WithCell<'_> {
+    debug self => _1;
+    let mut _0: WithCell<'_>;
+    scope 1 {
+        scope 2 {
+        }
+    }
+
+    bb0: {
+        _0 = copy (*_1);
+        return;
+    }
+}
+
+fn <impl at function_shadow.rs:82:10: 82:15>::clone(_1: &U) -> U {
+    debug self => _1;
+    let mut _0: U;
+    scope 1 {
+    }
+
+    bb0: {
+        _0 = copy (*_1);
+        return;
+    }
+}
+
+const Telemetry::readings::{constant#0}: usize = const 8_usize;
+
+const Telemetry::history::{constant#0}: usize = const 16_usize;
+
+fn <impl at function_shadow.rs:91:10: 91:15>::clone(_1: &Telemetry) -> Telemetry {
+    debug self => _1;
+    let mut _0: Telemetry;
+    scope 1 {
+        scope 2 {
+            scope 3 {
+                scope 4 {
+                }
+            }
+        }
+    }
+
+    bb0: {
+        _0 = copy (*_1);
+        return;
+    }
+}
+
+const <impl at function_shadow.rs:91:10: 91:15>::clone::{constant#0}: usize = const 8_usize;
+
+const <impl at function_shadow.rs:91:10: 91:15>::clone::{constant#1}: usize = const 16_usize;
+
+fn <impl at function_shadow.rs:91:23: 91:28>::fmt(_1: &Telemetry, _2: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+    debug self => _1;
+    debug f => _2;
+    let mut _0: core::result::Result<(), core::fmt::Error>;
+    let mut _3: &str;
+    let mut _4: &str;
+    let mut _5: &dyn core::fmt::Debug;
+    let _6: &Header;
+    let mut _7: &str;
+    let mut _8: &dyn core::fmt::Debug;
+    let _9: &u32;
+    let mut _10: &str;
+    let mut _11: &dyn core::fmt::Debug;
+    let _12: &[u32; 8];
+    let mut _13: &str;
+    let mut _14: &dyn core::fmt::Debug;
+    let _15: &&[u64; 16];
+    let _16: &[u64; 16];
+
+    bb0: {
+        _3 = const "Telemetry";
+        _4 = const "header";
+        _6 = &((*_1).0: Header);
+        _5 = copy _6 as &dyn core::fmt::Debug (PointerCoercion(Unsize, Implicit));
+        _7 = const "status";
+        _9 = &((*_1).1: u32);
+        _8 = copy _9 as &dyn core::fmt::Debug (PointerCoercion(Unsize, Implicit));
+        _10 = const "readings";
+        _12 = &((*_1).2: [u32; 8]);
+        _11 = copy _12 as &dyn core::fmt::Debug (PointerCoercion(Unsize, Implicit));
+        _13 = const "history";
+        _16 = &((*_1).3: [u64; 16]);
+        _15 = &_16;
+        _14 = copy _15 as &dyn core::fmt::Debug (PointerCoercion(Unsize, Implicit));
+        _0 = Formatter::<'_>::debug_struct_field4_finish(copy _2, move _3, move _4, move _5, move _7, move _8, move _10, move _11, move _13, move _14) -> [return: bb1, unwind continue];
+    }
+
+    bb1: {
+        return;
+    }
+}
+
+alloc12 (size: 7, align: 1) {
+    68 69 73 74 6f 72 79                            │ history
+}
+
+alloc11 (size: 8, align: 1) {
+    72 65 61 64 69 6e 67 73                         │ readings
+}
+
+alloc10 (size: 6, align: 1) {
+    73 74 61 74 75 73                               │ status
+}
+
+alloc9 (size: 6, align: 1) {
+    68 65 61 64 65 72                               │ header
+}
+
+alloc8 (size: 9, align: 1) {
+    54 65 6c 65 6d 65 74 72 79                      │ Telemetry
+}
+
+fn <impl at function_shadow.rs:91:30: 91:39>::eq(_1: &Telemetry, _2: &Telemetry) -> bool {
+    debug self => _1;
+    debug other => _2;
+    let mut _0: bool;
+    let mut _3: bool;
+    let mut _4: u32;
+    let mut _5: u32;
+    let mut _6: bool;
+    let mut _7: &Header;
+    let mut _8: &Header;
+    let mut _9: bool;
+    let mut _10: &[u32; 8];
+    let mut _11: &[u32; 8];
+    let mut _12: &[u64; 16];
+    let mut _13: &[u64; 16];
+
+    bb0: {
+        _4 = copy ((*_1).1: u32);
+        _5 = copy ((*_2).1: u32);
+        _3 = Eq(move _4, move _5);
+        switchInt(move _3) -> [0: bb6, otherwise: bb1];
+    }
+
+    bb1: {
+        _7 = &((*_1).0: Header);
+        _8 = &((*_2).0: Header);
+        _6 = <Header as PartialEq>::eq(move _7, move _8) -> [return: bb2, unwind continue];
+    }
+
+    bb2: {
+        switchInt(move _6) -> [0: bb6, otherwise: bb3];
+    }
+
+    bb3: {
+        _10 = &((*_1).2: [u32; 8]);
+        _11 = &((*_2).2: [u32; 8]);
+        _9 = <[u32; 8] as PartialEq>::eq(move _10, move _11) -> [return: bb4, unwind continue];
+    }
+
+    bb4: {
+        switchInt(move _9) -> [0: bb6, otherwise: bb5];
+    }
+
+    bb5: {
+        _12 = &((*_1).3: [u64; 16]);
+        _13 = &((*_2).3: [u64; 16]);
+        _0 = <[u64; 16] as PartialEq>::eq(move _12, move _13) -> [return: bb7, unwind continue];
+    }
+
+    bb6: {
+        _0 = const false;
+        goto -> bb7;
+    }
+
+    bb7: {
+        return;
+    }
+}
+
+fn <impl at function_shadow.rs:99:10: 99:15>::clone(_1: &Header) -> Header {
+    debug self => _1;
+    let mut _0: Header;
+    scope 1 {
+    }
+
+    bb0: {
+        _0 = copy (*_1);
+        return;
+    }
+}
+
+fn <impl at function_shadow.rs:99:23: 99:28>::fmt(_1: &Header, _2: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+    debug self => _1;
+    debug f => _2;
+    let mut _0: core::result::Result<(), core::fmt::Error>;
+    let mut _3: &str;
+    let mut _4: &str;
+    let mut _5: &dyn core::fmt::Debug;
+    let _6: &u32;
+    let mut _7: &str;
+    let mut _8: &dyn core::fmt::Debug;
+    let _9: &u32;
+    let mut _10: &str;
+    let mut _11: &dyn core::fmt::Debug;
+    let _12: &&u32;
+    let _13: &u32;
+
+    bb0: {
+        _3 = const "Header";
+        _4 = const "id";
+        _6 = &((*_1).0: u32);
+        _5 = copy _6 as &dyn core::fmt::Debug (PointerCoercion(Unsize, Implicit));
+        _7 = const "seq";
+        _9 = &((*_1).1: u32);
+        _8 = copy _9 as &dyn core::fmt::Debug (PointerCoercion(Unsize, Implicit));
+        _10 = const "flags";
+        _13 = &((*_1).2: u32);
+        _12 = &_13;
+        _11 = copy _12 as &dyn core::fmt::Debug (PointerCoercion(Unsize, Implicit));
+        _0 = Formatter::<'_>::debug_struct_field3_finish(copy _2, move _3, move _4, move _5, move _7, move _8, move _10, move _11) -> [return: bb1, unwind continue];
+    }
+
+    bb1: {
+        return;
+    }
+}
+
+alloc16 (size: 5, align: 1) {
+    66 6c 61 67 73                                  │ flags
+}
+
+alloc15 (size: 3, align: 1) {
+    73 65 71                                        │ seq
+}
+
+alloc14 (size: 2, align: 1) {
+    69 64                                           │ id
+}
+
+alloc13 (size: 6, align: 1) {
+    48 65 61 64 65 72                               │ Header
+}
+
+fn <impl at function_shadow.rs:99:30: 99:39>::eq(_1: &Header, _2: &Header) -> bool {
+    debug self => _1;
+    debug other => _2;
+    let mut _0: bool;
+    let mut _3: bool;
+    let mut _4: u32;
+    let mut _5: u32;
+    let mut _6: bool;
+    let mut _7: u32;
+    let mut _8: u32;
+    let mut _9: u32;
+    let mut _10: u32;
+
+    bb0: {
+        _4 = copy ((*_1).0: u32);
+        _5 = copy ((*_2).0: u32);
+        _3 = Eq(move _4, move _5);
+        switchInt(move _3) -> [0: bb3, otherwise: bb1];
+    }
+
+    bb1: {
+        _7 = copy ((*_1).1: u32);
+        _8 = copy ((*_2).1: u32);
+        _6 = Eq(move _7, move _8);
+        switchInt(move _6) -> [0: bb3, otherwise: bb2];
+    }
+
+    bb2: {
+        _9 = copy ((*_1).2: u32);
+        _10 = copy ((*_2).2: u32);
+        _0 = Eq(move _9, move _10);
+        goto -> bb4;
+    }
+
+    bb3: {
+        _0 = const false;
+        goto -> bb4;
+    }
+
+    bb4: {
+        return;
+    }
+}
+
+fn <impl at function_shadow.rs:107:10: 107:15>::clone(_1: &View<'_>) -> View<'_> {
+    debug self => _1;
+    let mut _0: View<'_>;
+    scope 1 {
+    }
+
+    bb0: {
+        _0 = copy (*_1);
+        return;
+    }
+}
+
+fn helper(_1: &mut State) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let mut _2: (u32, bool);
+
+    bb0: {
+        _2 = AddWithOverflow(copy ((*_1).1: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).1: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).1: u32) = move (_2.0: u32);
+        return;
+    }
+}
+
+fn basic_field(_1: &mut State) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let mut _2: (u32, bool);
+    let mut _3: &mut State;
+    let mut _4: State;
+    let mut _5: &mut State;
+
+    bb0: {
+        _3 = move _1;
+        ((_4.0: Position).0: u32) = copy (((*_3).0: Position).0: u32);
+        _5 = &mut _4;
+        _1 = move _5;
+        _2 = AddWithOverflow(copy (((*_1).0: Position).0: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy (((*_1).0: Position).0: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        (((*_1).0: Position).0: u32) = move (_2.0: u32);
+        (((*_3).0: Position).0: u32) = copy ((_4.0: Position).0: u32);
+        return;
+    }
+}
+
+fn basic_field_plain(_1: &mut State) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let mut _2: (u32, bool);
+
+    bb0: {
+        _2 = AddWithOverflow(copy (((*_1).0: Position).0: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy (((*_1).0: Position).0: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        (((*_1).0: Position).0: u32) = move (_2.0: u32);
+        return;
+    }
+}
+
+fn conditional_write(_1: &mut State, _2: bool) -> () {
+    debug state => _1;
+    debug modify => _2;
+    let mut _0: ();
+    let mut _3: (u32, bool);
+    let mut _4: &mut State;
+    let mut _5: State;
+    let mut _6: &mut State;
+
+    bb0: {
+        _4 = move _1;
+        ((_5.0: Position).0: u32) = copy (((*_4).0: Position).0: u32);
+        _6 = &mut _5;
+        _1 = move _6;
+        switchInt(copy _2) -> [0: bb3, otherwise: bb1];
+    }
+
+    bb1: {
+        _3 = AddWithOverflow(copy (((*_1).0: Position).0: u32), const 1_u32);
+        assert(!move (_3.1: bool), "attempt to compute `{} + {}`, which would overflow", copy (((*_1).0: Position).0: u32), const 1_u32) -> [success: bb2, unwind continue];
+    }
+
+    bb2: {
+        (((*_1).0: Position).0: u32) = move (_3.0: u32);
+        goto -> bb3;
+    }
+
+    bb3: {
+        (((*_4).0: Position).0: u32) = copy ((_5.0: Position).0: u32);
+        return;
+    }
+}
+
+fn conditional_write_plain(_1: &mut State, _2: bool) -> () {
+    debug state => _1;
+    debug modify => _2;
+    let mut _0: ();
+    let mut _3: (u32, bool);
+
+    bb0: {
+        switchInt(copy _2) -> [0: bb3, otherwise: bb1];
+    }
+
+    bb1: {
+        _3 = AddWithOverflow(copy (((*_1).0: Position).0: u32), const 1_u32);
+        assert(!move (_3.1: bool), "attempt to compute `{} + {}`, which would overflow", copy (((*_1).0: Position).0: u32), const 1_u32) -> [success: bb2, unwind continue];
+    }
+
+    bb2: {
+        (((*_1).0: Position).0: u32) = move (_3.0: u32);
+        goto -> bb3;
+    }
+
+    bb3: {
+        return;
+    }
+}
+
+fn overlapping_writes(_1: &mut State, _2: Position) -> () {
+    debug state => _1;
+    debug new_position => _2;
+    let mut _0: ();
+    let mut _3: &mut State;
+    let mut _4: State;
+    let mut _5: &mut State;
+
+    bb0: {
+        _3 = move _1;
+        (_4.0: Position) = copy ((*_3).0: Position);
+        _5 = &mut _4;
+        _1 = move _5;
+        ((*_1).0: Position) = copy _2;
+        (((*_1).0: Position).0: u32) = const 7_u32;
+        ((*_3).0: Position) = copy (_4.0: Position);
+        return;
+    }
+}
+
+fn overlapping_writes_plain(_1: &mut State, _2: Position) -> () {
+    debug state => _1;
+    debug new_position => _2;
+    let mut _0: ();
+
+    bb0: {
+        ((*_1).0: Position) = copy _2;
+        (((*_1).0: Position).0: u32) = const 7_u32;
+        return;
+    }
+}
+
+fn sibling_fields(_1: &mut State) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let mut _2: (u32, bool);
+    let mut _3: &mut State;
+    let mut _4: State;
+    let mut _5: &mut State;
+
+    bb0: {
+        _3 = move _1;
+        ((_4.0: Position).1: u32) = copy (((*_3).0: Position).1: u32);
+        (_4.1: u32) = copy ((*_3).1: u32);
+        _5 = &mut _4;
+        _1 = move _5;
+        (((*_1).0: Position).1: u32) = const 5_u32;
+        _2 = AddWithOverflow(copy ((*_1).1: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).1: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).1: u32) = move (_2.0: u32);
+        (((*_3).0: Position).1: u32) = copy ((_4.0: Position).1: u32);
+        ((*_3).1: u32) = copy (_4.1: u32);
+        return;
+    }
+}
+
+fn sibling_fields_plain(_1: &mut State) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let mut _2: (u32, bool);
+
+    bb0: {
+        (((*_1).0: Position).1: u32) = const 5_u32;
+        _2 = AddWithOverflow(copy ((*_1).1: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).1: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).1: u32) = move (_2.0: u32);
+        return;
+    }
+}
+
+fn whole_state(_1: &mut State, _2: State) -> () {
+    debug state => _1;
+    debug new_state => _2;
+    let mut _0: ();
+    let mut _3: &mut State;
+    let mut _4: State;
+    let mut _5: &mut State;
+
+    bb0: {
+        _3 = move _1;
+        _4 = copy (*_3);
+        _5 = &mut _4;
+        _1 = move _5;
+        (*_1) = copy _2;
+        (*_3) = copy _4;
+        return;
+    }
+}
+
+fn whole_state_plain(_1: &mut State, _2: State) -> () {
+    debug state => _1;
+    debug new_state => _2;
+    let mut _0: ();
+
+    bb0: {
+        (*_1) = copy _2;
+        return;
+    }
+}
+
+fn indexed_write(_1: &mut State, _2: usize) -> () {
+    debug state => _1;
+    debug i => _2;
+    let mut _0: ();
+    let mut _3: bool;
+    let mut _4: &mut State;
+    let mut _5: State;
+    let mut _6: &mut State;
+
+    bb0: {
+        _4 = move _1;
+        (_5.2: [u32; 4]) = copy ((*_4).2: [u32; 4]);
+        _6 = &mut _5;
+        _1 = move _6;
+        _3 = Lt(copy _2, const 4_usize);
+        assert(move _3, "index out of bounds: the length is {} but the index is {}", const 4_usize, copy _2) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).2: [u32; 4])[_2] = const 9_u32;
+        ((*_4).2: [u32; 4]) = copy (_5.2: [u32; 4]);
+        return;
+    }
+}
+
+fn indexed_write_plain(_1: &mut State, _2: usize) -> () {
+    debug state => _1;
+    debug i => _2;
+    let mut _0: ();
+    let mut _3: bool;
+
+    bb0: {
+        _3 = Lt(copy _2, const 4_usize);
+        assert(move _3, "index out of bounds: the length is {} but the index is {}", const 4_usize, copy _2) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).2: [u32; 4])[_2] = const 9_u32;
+        return;
+    }
+}
+
+fn with_return_value(_1: &mut State) -> u32 {
+    debug state => _1;
+    let mut _0: u32;
+    let mut _2: (u32, bool);
+    let mut _3: u32;
+    let mut _4: u32;
+    let mut _5: (u32, bool);
+    let mut _6: &mut State;
+    let mut _7: State;
+    let mut _8: &mut State;
+
+    bb0: {
+        _6 = move _1;
+        (_7.1: u32) = copy ((*_6).1: u32);
+        ((_7.0: Position).0: u32) = copy (((*_6).0: Position).0: u32);
+        _8 = &mut _7;
+        _1 = move _8;
+        _2 = AddWithOverflow(copy ((*_1).1: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).1: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).1: u32) = move (_2.0: u32);
+        _3 = copy ((*_1).1: u32);
+        _4 = copy (((*_1).0: Position).0: u32);
+        _5 = AddWithOverflow(copy _3, copy _4);
+        assert(!move (_5.1: bool), "attempt to compute `{} + {}`, which would overflow", move _3, move _4) -> [success: bb2, unwind continue];
+    }
+
+    bb2: {
+        _0 = move (_5.0: u32);
+        ((*_6).1: u32) = copy (_7.1: u32);
+        return;
+    }
+}
+
+fn with_return_value_plain(_1: &mut State) -> u32 {
+    debug state => _1;
+    let mut _0: u32;
+    let mut _2: (u32, bool);
+    let mut _3: u32;
+    let mut _4: u32;
+    let mut _5: (u32, bool);
+
+    bb0: {
+        _2 = AddWithOverflow(copy ((*_1).1: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).1: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).1: u32) = move (_2.0: u32);
+        _3 = copy ((*_1).1: u32);
+        _4 = copy (((*_1).0: Position).0: u32);
+        _5 = AddWithOverflow(copy _3, copy _4);
+        assert(!move (_5.1: bool), "attempt to compute `{} + {}`, which would overflow", move _3, move _4) -> [success: bb2, unwind continue];
+    }
+
+    bb2: {
+        _0 = move (_5.0: u32);
+        return;
+    }
+}
+
+fn multiple_returns(_1: &mut State, _2: bool) -> u32 {
+    debug state => _1;
+    debug early => _2;
+    let mut _0: u32;
+    let mut _3: (u32, bool);
+    let mut _4: &mut State;
+    let mut _5: State;
+    let mut _6: &mut State;
+
+    bb0: {
+        _4 = move _1;
+        (_5.1: u32) = copy ((*_4).1: u32);
+        _6 = &mut _5;
+        _1 = move _6;
+        switchInt(copy _2) -> [0: bb2, otherwise: bb1];
+    }
+
+    bb1: {
+        _0 = copy ((*_1).1: u32);
+        goto -> bb4;
+    }
+
+    bb2: {
+        _3 = AddWithOverflow(copy ((*_1).1: u32), const 1_u32);
+        assert(!move (_3.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).1: u32), const 1_u32) -> [success: bb3, unwind continue];
+    }
+
+    bb3: {
+        ((*_1).1: u32) = move (_3.0: u32);
+        _0 = copy ((*_1).1: u32);
+        goto -> bb4;
+    }
+
+    bb4: {
+        ((*_4).1: u32) = copy (_5.1: u32);
+        return;
+    }
+}
+
+fn multiple_returns_plain(_1: &mut State, _2: bool) -> u32 {
+    debug state => _1;
+    debug early => _2;
+    let mut _0: u32;
+    let mut _3: (u32, bool);
+
+    bb0: {
+        switchInt(copy _2) -> [0: bb2, otherwise: bb1];
+    }
+
+    bb1: {
+        _0 = copy ((*_1).1: u32);
+        goto -> bb4;
+    }
+
+    bb2: {
+        _3 = AddWithOverflow(copy ((*_1).1: u32), const 1_u32);
+        assert(!move (_3.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).1: u32), const 1_u32) -> [success: bb3, unwind continue];
+    }
+
+    bb3: {
+        ((*_1).1: u32) = move (_3.0: u32);
+        _0 = copy ((*_1).1: u32);
+        goto -> bb4;
+    }
+
+    bb4: {
+        return;
+    }
+}
+
+fn panics_before_commit(_1: &mut State, _2: bool) -> () {
+    debug state => _1;
+    debug boom => _2;
+    let mut _0: ();
+    let mut _3: (u32, bool);
+    let _4: !;
+    let mut _5: core::fmt::Arguments<'_>;
+    let mut _6: &mut State;
+    let mut _7: State;
+    let mut _8: &mut State;
+
+    bb0: {
+        _6 = move _1;
+        (_7.1: u32) = copy ((*_6).1: u32);
+        _8 = &mut _7;
+        _1 = move _8;
+        _3 = AddWithOverflow(copy ((*_1).1: u32), const 1_u32);
+        assert(!move (_3.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).1: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).1: u32) = move (_3.0: u32);
+        switchInt(copy _2) -> [0: bb4, otherwise: bb2];
+    }
+
+    bb2: {
+        _5 = Arguments::<'_>::from_str(const "shadow must not be committed") -> [return: bb3, unwind continue];
+    }
+
+    bb3: {
+        _4 = panic_fmt(move _5) -> unwind continue;
+    }
+
+    bb4: {
+        ((*_6).1: u32) = copy (_7.1: u32);
+        return;
+    }
+}
+
+alloc17 (size: 28, align: 1) {
+    0x00 │ 73 68 61 64 6f 77 20 6d 75 73 74 20 6e 6f 74 20 │ shadow must not 
+    0x10 │ 62 65 20 63 6f 6d 6d 69 74 74 65 64             │ be committed
+}
+
+fn panics_before_commit_plain(_1: &mut State, _2: bool) -> () {
+    debug state => _1;
+    debug boom => _2;
+    let mut _0: ();
+    let mut _3: (u32, bool);
+    let _4: !;
+    let mut _5: core::fmt::Arguments<'_>;
+
+    bb0: {
+        _3 = AddWithOverflow(copy ((*_1).1: u32), const 1_u32);
+        assert(!move (_3.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).1: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).1: u32) = move (_3.0: u32);
+        switchInt(copy _2) -> [0: bb4, otherwise: bb2];
+    }
+
+    bb2: {
+        _5 = Arguments::<'_>::from_str(const "shadow must not be committed") -> [return: bb3, unwind continue];
+    }
+
+    bb3: {
+        _4 = panic_fmt(move _5) -> unwind continue;
+    }
+
+    bb4: {
+        return;
+    }
+}
+
+alloc17 (size: 28, align: 1) {
+    0x00 │ 73 68 61 64 6f 77 20 6d 75 73 74 20 6e 6f 74 20 │ shadow must not 
+    0x10 │ 62 65 20 63 6f 6d 6d 69 74 74 65 64             │ be committed
+}
+
+fn read_only_field(_1: &mut Telemetry) -> () {
+    debug t => _1;
+    let mut _0: ();
+    let mut _2: u32;
+    let mut _3: (u32, bool);
+    let mut _4: &mut Telemetry;
+    let mut _5: Telemetry;
+    let mut _6: &mut Telemetry;
+
+    bb0: {
+        _4 = move _1;
+        ((_5.0: Header).0: u32) = copy (((*_4).0: Header).0: u32);
+        (_5.1: u32) = copy ((*_4).1: u32);
+        _6 = &mut _5;
+        _1 = move _6;
+        _2 = copy (((*_1).0: Header).0: u32);
+        _3 = AddWithOverflow(copy ((*_1).1: u32), copy _2);
+        assert(!move (_3.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).1: u32), move _2) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).1: u32) = move (_3.0: u32);
+        ((*_4).1: u32) = copy (_5.1: u32);
+        return;
+    }
+}
+
+fn read_only_field_plain(_1: &mut Telemetry) -> () {
+    debug t => _1;
+    let mut _0: ();
+    let mut _2: u32;
+    let mut _3: (u32, bool);
+
+    bb0: {
+        _2 = copy (((*_1).0: Header).0: u32);
+        _3 = AddWithOverflow(copy ((*_1).1: u32), copy _2);
+        assert(!move (_3.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).1: u32), move _2) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).1: u32) = move (_3.0: u32);
+        return;
+    }
+}
+
+fn write_only_field(_1: &mut Telemetry) -> () {
+    debug t => _1;
+    let mut _0: ();
+    let mut _2: &mut Telemetry;
+    let mut _3: Telemetry;
+    let mut _4: &mut Telemetry;
+
+    bb0: {
+        _2 = move _1;
+        (_3.1: u32) = copy ((*_2).1: u32);
+        _4 = &mut _3;
+        _1 = move _4;
+        ((*_1).1: u32) = const 7_u32;
+        ((*_2).1: u32) = copy (_3.1: u32);
+        return;
+    }
+}
+
+fn write_only_field_plain(_1: &mut Telemetry) -> () {
+    debug t => _1;
+    let mut _0: ();
+
+    bb0: {
+        ((*_1).1: u32) = const 7_u32;
+        return;
+    }
+}
+
+fn write_under_if(_1: &mut Telemetry, _2: bool) -> () {
+    debug t => _1;
+    debug set => _2;
+    let mut _0: ();
+    let mut _3: &mut Telemetry;
+    let mut _4: Telemetry;
+    let mut _5: &mut Telemetry;
+
+    bb0: {
+        _3 = move _1;
+        (_4.1: u32) = copy ((*_3).1: u32);
+        _5 = &mut _4;
+        _1 = move _5;
+        switchInt(copy _2) -> [0: bb2, otherwise: bb1];
+    }
+
+    bb1: {
+        ((*_1).1: u32) = const 1_u32;
+        goto -> bb2;
+    }
+
+    bb2: {
+        ((*_3).1: u32) = copy (_4.1: u32);
+        return;
+    }
+}
+
+fn write_under_if_plain(_1: &mut Telemetry, _2: bool) -> () {
+    debug t => _1;
+    debug set => _2;
+    let mut _0: ();
+
+    bb0: {
+        switchInt(copy _2) -> [0: bb2, otherwise: bb1];
+    }
+
+    bb1: {
+        ((*_1).1: u32) = const 1_u32;
+        goto -> bb2;
+    }
+
+    bb2: {
+        return;
+    }
+}
+
+fn untouched_fields(_1: &mut Telemetry) -> () {
+    debug t => _1;
+    let mut _0: ();
+    let mut _2: (u32, bool);
+    let mut _3: &mut Telemetry;
+    let mut _4: Telemetry;
+    let mut _5: &mut Telemetry;
+
+    bb0: {
+        _3 = move _1;
+        ((_4.0: Header).1: u32) = copy (((*_3).0: Header).1: u32);
+        _5 = &mut _4;
+        _1 = move _5;
+        _2 = AddWithOverflow(copy (((*_1).0: Header).1: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy (((*_1).0: Header).1: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        (((*_1).0: Header).1: u32) = move (_2.0: u32);
+        (((*_3).0: Header).1: u32) = copy ((_4.0: Header).1: u32);
+        return;
+    }
+}
+
+fn untouched_fields_plain(_1: &mut Telemetry) -> () {
+    debug t => _1;
+    let mut _0: ();
+    let mut _2: (u32, bool);
+
+    bb0: {
+        _2 = AddWithOverflow(copy (((*_1).0: Header).1: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy (((*_1).0: Header).1: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        (((*_1).0: Header).1: u32) = move (_2.0: u32);
+        return;
+    }
+}
+
+fn nested_siblings(_1: &mut Telemetry) -> () {
+    debug t => _1;
+    let mut _0: ();
+    let mut _2: &mut Telemetry;
+    let mut _3: Telemetry;
+    let mut _4: &mut Telemetry;
+
+    bb0: {
+        _2 = move _1;
+        ((_3.0: Header).0: u32) = copy (((*_2).0: Header).0: u32);
+        ((_3.0: Header).2: u32) = copy (((*_2).0: Header).2: u32);
+        _4 = &mut _3;
+        _1 = move _4;
+        (((*_1).0: Header).0: u32) = const 1_u32;
+        (((*_1).0: Header).2: u32) = BitOr(copy (((*_1).0: Header).2: u32), const 4_u32);
+        (((*_2).0: Header).0: u32) = copy ((_3.0: Header).0: u32);
+        (((*_2).0: Header).2: u32) = copy ((_3.0: Header).2: u32);
+        return;
+    }
+}
+
+fn nested_siblings_plain(_1: &mut Telemetry) -> () {
+    debug t => _1;
+    let mut _0: ();
+
+    bb0: {
+        (((*_1).0: Header).0: u32) = const 1_u32;
+        (((*_1).0: Header).2: u32) = BitOr(copy (((*_1).0: Header).2: u32), const 4_u32);
+        return;
+    }
+}
+
+fn constant_index_expr(_1: &mut Telemetry) -> () {
+    debug t => _1;
+    let mut _0: ();
+    let _2: usize;
+    let mut _3: bool;
+    let mut _4: &mut Telemetry;
+    let mut _5: Telemetry;
+    let mut _6: &mut Telemetry;
+
+    bb0: {
+        _4 = move _1;
+        (_5.2: [u32; 8]) = copy ((*_4).2: [u32; 8]);
+        _6 = &mut _5;
+        _1 = move _6;
+        _2 = const 2_usize;
+        _3 = Lt(copy _2, const 8_usize);
+        assert(move _3, "index out of bounds: the length is {} but the index is {}", const 8_usize, copy _2) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).2: [u32; 8])[_2] = const 5_u32;
+        ((*_4).2: [u32; 8]) = copy (_5.2: [u32; 8]);
+        return;
+    }
+}
+
+fn constant_index_expr_plain(_1: &mut Telemetry) -> () {
+    debug t => _1;
+    let mut _0: ();
+    let _2: usize;
+    let mut _3: bool;
+
+    bb0: {
+        _2 = const 2_usize;
+        _3 = Lt(copy _2, const 8_usize);
+        assert(move _3, "index out of bounds: the length is {} but the index is {}", const 8_usize, copy _2) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).2: [u32; 8])[_2] = const 5_u32;
+        return;
+    }
+}
+
+fn constant_index_pattern(_1: &mut Telemetry) -> () {
+    debug t => _1;
+    let mut _0: ();
+    let _2: u32;
+    let mut _3: &mut Telemetry;
+    let mut _4: Telemetry;
+    let mut _5: &mut Telemetry;
+    scope 1 {
+        debug third => _2;
+    }
+
+    bb0: {
+        _3 = move _1;
+        (_4.2: [u32; 8]) = copy ((*_3).2: [u32; 8]);
+        (_4.1: u32) = copy ((*_3).1: u32);
+        _5 = &mut _4;
+        _1 = move _5;
+        _2 = copy ((*_1).2: [u32; 8])[2 of 8];
+        ((*_1).1: u32) = copy _2;
+        ((*_3).1: u32) = copy (_4.1: u32);
+        return;
+    }
+}
+
+fn constant_index_pattern_plain(_1: &mut Telemetry) -> () {
+    debug t => _1;
+    let mut _0: ();
+    let _2: u32;
+    scope 1 {
+        debug third => _2;
+    }
+
+    bb0: {
+        _2 = copy ((*_1).2: [u32; 8])[2 of 8];
+        ((*_1).1: u32) = copy _2;
+        return;
+    }
+}
+
+fn runtime_index(_1: &mut Telemetry, _2: usize, _3: u32) -> () {
+    debug t => _1;
+    debug i => _2;
+    debug v => _3;
+    let mut _0: ();
+    let mut _4: bool;
+    let mut _5: &mut Telemetry;
+    let mut _6: Telemetry;
+    let mut _7: &mut Telemetry;
+
+    bb0: {
+        _5 = move _1;
+        (_6.2: [u32; 8]) = copy ((*_5).2: [u32; 8]);
+        _7 = &mut _6;
+        _1 = move _7;
+        _4 = Lt(copy _2, const 8_usize);
+        assert(move _4, "index out of bounds: the length is {} but the index is {}", const 8_usize, copy _2) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).2: [u32; 8])[_2] = copy _3;
+        ((*_5).2: [u32; 8]) = copy (_6.2: [u32; 8]);
+        return;
+    }
+}
+
+fn runtime_index_plain(_1: &mut Telemetry, _2: usize, _3: u32) -> () {
+    debug t => _1;
+    debug i => _2;
+    debug v => _3;
+    let mut _0: ();
+    let mut _4: bool;
+
+    bb0: {
+        _4 = Lt(copy _2, const 8_usize);
+        assert(move _4, "index out of bounds: the length is {} but the index is {}", const 8_usize, copy _2) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).2: [u32; 8])[_2] = copy _3;
+        return;
+    }
+}
+
+fn whole_value_read(_1: &mut Telemetry) -> u32 {
+    debug t => _1;
+    let mut _0: u32;
+    let _2: Telemetry;
+    let mut _3: u32;
+    let mut _4: u32;
+    let mut _5: (u32, bool);
+    let mut _6: &mut Telemetry;
+    let mut _7: Telemetry;
+    let mut _8: &mut Telemetry;
+    scope 1 {
+        debug snapshot => _2;
+    }
+
+    bb0: {
+        _6 = move _1;
+        _7 = copy (*_6);
+        _8 = &mut _7;
+        _1 = move _8;
+        _2 = copy (*_1);
+        ((*_1).1: u32) = const 3_u32;
+        _3 = copy (_2.1: u32);
+        _4 = copy ((_2.0: Header).0: u32);
+        _5 = AddWithOverflow(copy _3, copy _4);
+        assert(!move (_5.1: bool), "attempt to compute `{} + {}`, which would overflow", move _3, move _4) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        _0 = move (_5.0: u32);
+        ((*_6).1: u32) = copy (_7.1: u32);
+        return;
+    }
+}
+
+fn whole_value_read_plain(_1: &mut Telemetry) -> u32 {
+    debug t => _1;
+    let mut _0: u32;
+    let _2: Telemetry;
+    let mut _3: u32;
+    let mut _4: u32;
+    let mut _5: (u32, bool);
+    scope 1 {
+        debug snapshot => _2;
+    }
+
+    bb0: {
+        _2 = copy (*_1);
+        ((*_1).1: u32) = const 3_u32;
+        _3 = copy (_2.1: u32);
+        _4 = copy ((_2.0: Header).0: u32);
+        _5 = AddWithOverflow(copy _3, copy _4);
+        assert(!move (_5.1: bool), "attempt to compute `{} + {}`, which would overflow", move _3, move _4) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        _0 = move (_5.0: u32);
+        return;
+    }
+}
+
+fn shared_ref_state(_1: &mut WithShared<'_>) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let mut _2: (u32, bool);
+
+    bb0: {
+        _2 = AddWithOverflow(copy ((*_1).0: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).0: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).0: u32) = move (_2.0: u32);
+        return;
+    }
+}
+
+fn two_mut_args(_1: &mut State, _2: &mut State) -> () {
+    debug a => _1;
+    debug b => _2;
+    let mut _0: ();
+    let mut _3: (u32, bool);
+    let mut _4: (u32, bool);
+
+    bb0: {
+        _3 = AddWithOverflow(copy ((*_1).1: u32), const 1_u32);
+        assert(!move (_3.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).1: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).1: u32) = move (_3.0: u32);
+        _4 = AddWithOverflow(copy ((*_2).1: u32), const 1_u32);
+        assert(!move (_4.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_2).1: u32), const 1_u32) -> [success: bb2, unwind continue];
+    }
+
+    bb2: {
+        ((*_2).1: u32) = move (_4.0: u32);
+        return;
+    }
+}
+
+fn non_copy_state(_1: &mut Owned) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let mut _2: (u32, bool);
+
+    bb0: {
+        _2 = AddWithOverflow(copy ((*_1).0: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).0: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).0: u32) = move (_2.0: u32);
+        return;
+    }
+}
+
+fn raw_ptr_state(_1: &mut WithPtr) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let mut _2: (u32, bool);
+
+    bb0: {
+        _2 = AddWithOverflow(copy ((*_1).0: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).0: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).0: u32) = move (_2.0: u32);
+        return;
+    }
+}
+
+fn returns_reference(_1: &mut State) -> &mut u32 {
+    debug state => _1;
+    let mut _0: &mut u32;
+
+    bb0: {
+        _0 = &mut ((*_1).1: u32);
+        return;
+    }
+}
+
+fn nested_raw_ptr_state(_1: &mut Nested) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let mut _2: (u32, bool);
+
+    bb0: {
+        _2 = AddWithOverflow(copy (((*_1).0: WithPtr).0: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy (((*_1).0: WithPtr).0: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        (((*_1).0: WithPtr).0: u32) = move (_2.0: u32);
+        return;
+    }
+}
+
+fn generic_state(_1: &mut (T, u32)) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let mut _2: (u32, bool);
+
+    bb0: {
+        _2 = AddWithOverflow(copy ((*_1).1: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).1: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).1: u32) = move (_2.0: u32);
+        return;
+    }
+}
+
+fn returns_nested_reference(_1: &mut State) -> View<'_> {
+    debug state => _1;
+    let mut _0: View<'_>;
+    let _2: &u32;
+
+    bb0: {
+        _2 = &((*_1).1: u32);
+        _0 = View::<'_> { counter: copy _2 };
+        return;
+    }
+}
+
+fn mutable_reborrow(_1: &mut State) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let _2: ();
+
+    bb0: {
+        _2 = helper(copy _1) -> [return: bb1, unwind continue];
+    }
+
+    bb1: {
+        return;
+    }
+}
+
+fn read_only(_1: &mut State) -> u32 {
+    debug state => _1;
+    let mut _0: u32;
+    let mut _2: u32;
+    let mut _3: u32;
+    let mut _4: (u32, bool);
+
+    bb0: {
+        _2 = copy ((*_1).1: u32);
+        _3 = copy (((*_1).0: Position).0: u32);
+        _4 = AddWithOverflow(copy _2, copy _3);
+        assert(!move (_4.1: bool), "attempt to compute `{} + {}`, which would overflow", move _2, move _3) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        _0 = move (_4.0: u32);
+        return;
+    }
+}
+
+fn remember_counter(_1: &mut WithShared<'_>) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let _2: &u32;
+
+    bb0: {
+        _2 = &((*_1).0: u32);
+        ((*_1).1: &u32) = copy _2;
+        return;
+    }
+}
+
+fn cell_escape(_1: &mut WithCell<'_>) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let mut _2: (u32, bool);
+    let _3: ();
+    let mut _4: &core::cell::Cell<u32>;
+
+    bb0: {
+        _2 = AddWithOverflow(copy ((*_1).0: u32), const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy ((*_1).0: u32), const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        ((*_1).0: u32) = move (_2.0: u32);
+        _4 = copy ((*_1).1: &core::cell::Cell<u32>);
+        _3 = Cell::<u32>::set(copy _4, const 99_u32) -> [return: bb2, unwind continue];
+    }
+
+    bb2: {
+        return;
+    }
+}
+
+fn union_write(_1: &mut U, _2: bool) -> () {
+    debug u => _1;
+    debug change => _2;
+    let mut _0: ();
+
+    bb0: {
+        switchInt(copy _2) -> [0: bb2, otherwise: bb1];
+    }
+
+    bb1: {
+        ((*_1).0: bool) = const true;
+        goto -> bb2;
+    }
+
+    bb2: {
+        return;
+    }
+}
+
+fn sample_state() -> State {
+    let mut _0: State;
+    let mut _1: Position;
+    let mut _2: [u32; 4];
+
+    bb0: {
+        _1 = Position { x: const 10_u32, y: const 20_u32 };
+        _2 = [const 0_u32, const 1_u32, const 2_u32, const 3_u32];
+        _0 = State { position: move _1, counter: const 30_u32, samples: move _2 };
+        return;
+    }
+}
+
+fn other_state() -> State {
+    let mut _0: State;
+    let mut _1: Position;
+    let mut _2: [u32; 4];
+
+    bb0: {
+        _1 = Position { x: const 1_u32, y: const 2_u32 };
+        _2 = [const 4_u32, const 5_u32, const 6_u32, const 7_u32];
+        _0 = State { position: move _1, counter: const 3_u32, samples: move _2 };
+        return;
+    }
+}
+
+fn sample_telemetry() -> Telemetry {
+    let mut _0: Telemetry;
+    let mut _1: [u64; 16];
+    let mut _3: bool;
+    let mut _4: usize;
+    let mut _5: usize;
+    let mut _6: &[u64];
+    let mut _7: &[u64; 16];
+    let mut _8: u64;
+    let mut _9: usize;
+    let mut _10: (u64, bool);
+    let _11: usize;
+    let mut _12: bool;
+    let mut _13: (usize, bool);
+    let mut _14: Header;
+    let mut _15: [u32; 8];
+    let mut _16: [u64; 16];
+    scope 1 {
+        debug history => _1;
+        let mut _2: usize;
+        scope 2 {
+            debug i => _2;
+        }
+    }
+
+    bb0: {
+        _1 = [const 0_u64; 16];
+        _2 = const 0_usize;
+        goto -> bb1;
+    }
+
+    bb1: {
+        _4 = copy _2;
+        _7 = &_1;
+        _6 = move _7 as &[u64] (PointerCoercion(Unsize, Implicit));
+        _5 = PtrMetadata(move _6);
+        _3 = Lt(move _4, move _5);
+        switchInt(move _3) -> [0: bb6, otherwise: bb2];
+    }
+
+    bb2: {
+        _9 = copy _2;
+        _8 = move _9 as u64 (IntToInt);
+        _10 = AddWithOverflow(const 1000_u64, copy _8);
+        assert(!move (_10.1: bool), "attempt to compute `{} + {}`, which would overflow", const 1000_u64, move _8) -> [success: bb3, unwind continue];
+    }
+
+    bb3: {
+        _11 = copy _2;
+        _12 = Lt(copy _11, const 16_usize);
+        assert(move _12, "index out of bounds: the length is {} but the index is {}", const 16_usize, copy _11) -> [success: bb4, unwind continue];
+    }
+
+    bb4: {
+        _1[_11] = move (_10.0: u64);
+        _13 = AddWithOverflow(copy _2, const 1_usize);
+        assert(!move (_13.1: bool), "attempt to compute `{} + {}`, which would overflow", copy _2, const 1_usize) -> [success: bb5, unwind continue];
+    }
+
+    bb5: {
+        _2 = move (_13.0: usize);
+        goto -> bb1;
+    }
+
+    bb6: {
+        _14 = Header { id: const 11_u32, seq: const 22_u32, flags: const 1_u32 };
+        _15 = [const 1_u32, const 2_u32, const 3_u32, const 4_u32, const 5_u32, const 6_u32, const 7_u32, const 8_u32];
+        _16 = copy _1;
+        _0 = Telemetry { header: move _14, status: const 40_u32, readings: move _15, history: move _16 };
+        return;
+    }
+}
+
+const sample_telemetry::{constant#0}: usize = const 16_usize;
+
+fn other_telemetry() -> Telemetry {
+    let mut _0: Telemetry;
+    let mut _1: Header;
+    let mut _2: u32;
+    let mut _3: (u32, bool);
+    let mut _4: [u32; 8];
+    let mut _5: [u64; 16];
+
+    bb0: {
+        _3 = SubWithOverflow(const core::num::<impl u32>::MAX, const 1_u32);
+        assert(!move (_3.1: bool), "attempt to compute `{} - {}`, which would overflow", const core::num::<impl u32>::MAX, const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        _2 = move (_3.0: u32);
+        _1 = Header { id: const 57005_u32, seq: move _2, flags: const 240_u32 };
+        _4 = [const 80_u32, const 70_u32, const 60_u32, const 50_u32, const 40_u32, const 30_u32, const 20_u32, const 10_u32];
+        _5 = [const core::num::<impl u64>::MAX; 16];
+        _0 = Telemetry { header: move _1, status: const 0_u32, readings: move _4, history: move _5 };
+        return;
+    }
+}
+
+const other_telemetry::{constant#0}: usize = const 16_usize;
+
+fn run_checks() -> Result<(), &str> {
+    let mut _0: core::result::Result<(), &str>;
+    let mut _1: State;
+    let _2: ();
+    let mut _3: &mut State;
+    let mut _4: bool;
+    let mut _5: u32;
+    let mut _6: &str;
+    let mut _7: bool;
+    let mut _8: u32;
+    let mut _9: &str;
+    let mut _10: bool;
+    let mut _11: u32;
+    let mut _12: &str;
+    let mut _13: bool;
+    let mut _14: &[u32; 4];
+    let mut _15: &[u32; 4];
+    let mut _16: &str;
+    let _18: ();
+    let mut _19: &mut State;
+    let mut _20: bool;
+    let mut _21: &State;
+    let mut _22: &State;
+    let _23: State;
+    let mut _24: &str;
+    let _25: ();
+    let mut _26: &mut State;
+    let mut _27: bool;
+    let mut _28: u32;
+    let mut _29: &str;
+    let _31: ();
+    let mut _32: &mut State;
+    let mut _33: Position;
+    let mut _34: bool;
+    let mut _35: &Position;
+    let mut _36: &Position;
+    let mut _37: &str;
+    let mut _38: bool;
+    let mut _39: u32;
+    let mut _40: &str;
+    let _42: ();
+    let mut _43: &mut State;
+    let mut _44: bool;
+    let mut _45: &Position;
+    let mut _46: &Position;
+    let mut _47: &str;
+    let mut _48: bool;
+    let mut _49: u32;
+    let mut _50: &str;
+    let mut _52: Position;
+    let mut _53: [u32; 4];
+    let _55: ();
+    let mut _56: &mut State;
+    let mut _57: bool;
+    let mut _58: &State;
+    let mut _59: &State;
+    let mut _60: &str;
+    let _62: ();
+    let mut _63: &mut State;
+    let mut _64: bool;
+    let mut _65: &[u32; 4];
+    let mut _66: &[u32; 4];
+    let mut _67: &str;
+    let mut _68: bool;
+    let mut _69: u32;
+    let mut _70: &str;
+    let mut _72: bool;
+    let mut _73: u32;
+    let mut _74: &mut State;
+    let mut _75: &str;
+    let mut _76: bool;
+    let mut _77: u32;
+    let mut _78: &str;
+    let mut _80: bool;
+    let mut _81: u32;
+    let mut _82: &mut State;
+    let mut _83: &str;
+    let mut _84: bool;
+    let mut _85: u32;
+    let mut _86: &str;
+    let mut _87: bool;
+    let mut _88: u32;
+    let mut _89: &mut State;
+    let mut _90: &str;
+    let mut _91: bool;
+    let mut _92: u32;
+    let mut _93: &str;
+    let _95: ();
+    let mut _96: &mut State;
+    let mut _97: bool;
+    let mut _98: u32;
+    let mut _99: &str;
+    let _102: &u32;
+    let _103: ();
+    let mut _104: &mut WithShared<'_>;
+    let mut _105: bool;
+    let mut _106: u32;
+    let mut _107: &str;
+    let mut _108: bool;
+    let mut _109: u32;
+    let mut _110: &str;
+    let mut _112: WithPtr;
+    let mut _113: *mut u32;
+    let _114: ();
+    let mut _115: &mut Nested;
+    let mut _116: bool;
+    let mut _117: u32;
+    let mut _118: &str;
+    let _120: ();
+    let mut _121: &mut (u8, u32);
+    let mut _122: bool;
+    let mut _123: &(u8, u32);
+    let mut _124: &(u8, u32);
+    let mut _125: &str;
+    let mut _126: core::array::IntoIter<State, 2>;
+    let mut _127: [State; 2];
+    let mut _128: State;
+    let mut _129: State;
+    let mut _131: core::option::Option<State>;
+    let mut _132: &mut core::array::IntoIter<State, 2>;
+    let mut _133: isize;
+    let mut _138: &mut State;
+    let mut _140: &mut State;
+    let mut _141: bool;
+    let mut _142: &State;
+    let mut _143: &State;
+    let mut _144: bool;
+    let mut _145: &();
+    let mut _146: &();
+    let mut _147: &str;
+    let mut _151: &mut State;
+    let mut _153: &mut State;
+    let mut _154: bool;
+    let mut _155: &State;
+    let mut _156: &State;
+    let mut _157: bool;
+    let mut _158: &();
+    let mut _159: &();
+    let mut _160: &str;
+    let mut _164: &mut State;
+    let mut _166: &mut State;
+    let mut _167: bool;
+    let mut _168: &State;
+    let mut _169: &State;
+    let mut _170: bool;
+    let mut _171: &();
+    let mut _172: &();
+    let mut _173: &str;
+    let mut _177: &mut State;
+    let mut _178: Position;
+    let mut _180: &mut State;
+    let mut _181: Position;
+    let mut _182: bool;
+    let mut _183: &State;
+    let mut _184: &State;
+    let mut _185: bool;
+    let mut _186: &();
+    let mut _187: &();
+    let mut _188: &str;
+    let mut _192: &mut State;
+    let mut _194: &mut State;
+    let mut _195: bool;
+    let mut _196: &State;
+    let mut _197: &State;
+    let mut _198: bool;
+    let mut _199: &();
+    let mut _200: &();
+    let mut _201: &str;
+    let mut _205: &mut State;
+    let mut _206: State;
+    let mut _208: &mut State;
+    let mut _209: State;
+    let mut _210: bool;
+    let mut _211: &State;
+    let mut _212: &State;
+    let mut _213: bool;
+    let mut _214: &();
+    let mut _215: &();
+    let mut _216: &str;
+    let mut _217: core::ops::Range<usize>;
+    let mut _218: core::ops::Range<usize>;
+    let mut _220: core::option::Option<usize>;
+    let mut _221: &mut core::ops::Range<usize>;
+    let mut _222: isize;
+    let mut _227: &mut State;
+    let mut _229: &mut State;
+    let mut _230: bool;
+    let mut _231: &State;
+    let mut _232: &State;
+    let mut _233: bool;
+    let mut _234: &();
+    let mut _235: &();
+    let mut _236: &str;
+    let mut _240: &mut State;
+    let mut _242: &mut State;
+    let mut _243: bool;
+    let mut _244: &State;
+    let mut _245: &State;
+    let mut _246: bool;
+    let mut _247: &str;
+    let mut _251: &mut State;
+    let mut _253: &mut State;
+    let mut _254: bool;
+    let mut _255: &State;
+    let mut _256: &State;
+    let mut _257: bool;
+    let mut _258: &str;
+    let mut _262: &mut State;
+    let mut _264: &mut State;
+    let mut _265: bool;
+    let mut _266: &State;
+    let mut _267: &State;
+    let mut _268: bool;
+    let mut _269: &str;
+    let mut _273: &mut State;
+    let mut _275: &mut State;
+    let mut _276: bool;
+    let mut _277: &State;
+    let mut _278: &State;
+    let mut _279: bool;
+    let mut _280: &();
+    let mut _281: &();
+    let mut _282: &str;
+    let mut _283: core::array::IntoIter<Telemetry, 2>;
+    let mut _284: [Telemetry; 2];
+    let mut _285: Telemetry;
+    let mut _286: Telemetry;
+    let mut _288: core::option::Option<Telemetry>;
+    let mut _289: &mut core::array::IntoIter<Telemetry, 2>;
+    let mut _290: isize;
+    let mut _295: &mut Telemetry;
+    let mut _297: &mut Telemetry;
+    let mut _298: bool;
+    let mut _299: &Telemetry;
+    let mut _300: &Telemetry;
+    let mut _301: bool;
+    let mut _302: &();
+    let mut _303: &();
+    let mut _304: &str;
+    let mut _308: &mut Telemetry;
+    let mut _310: &mut Telemetry;
+    let mut _311: bool;
+    let mut _312: &Telemetry;
+    let mut _313: &Telemetry;
+    let mut _314: bool;
+    let mut _315: &();
+    let mut _316: &();
+    let mut _317: &str;
+    let mut _321: &mut Telemetry;
+    let mut _323: &mut Telemetry;
+    let mut _324: bool;
+    let mut _325: &Telemetry;
+    let mut _326: &Telemetry;
+    let mut _327: bool;
+    let mut _328: &();
+    let mut _329: &();
+    let mut _330: &str;
+    let mut _334: &mut Telemetry;
+    let mut _336: &mut Telemetry;
+    let mut _337: bool;
+    let mut _338: &Telemetry;
+    let mut _339: &Telemetry;
+    let mut _340: bool;
+    let mut _341: &();
+    let mut _342: &();
+    let mut _343: &str;
+    let mut _347: &mut Telemetry;
+    let mut _349: &mut Telemetry;
+    let mut _350: bool;
+    let mut _351: &Telemetry;
+    let mut _352: &Telemetry;
+    let mut _353: bool;
+    let mut _354: &();
+    let mut _355: &();
+    let mut _356: &str;
+    let mut _360: &mut Telemetry;
+    let mut _362: &mut Telemetry;
+    let mut _363: bool;
+    let mut _364: &Telemetry;
+    let mut _365: &Telemetry;
+    let mut _366: bool;
+    let mut _367: &();
+    let mut _368: &();
+    let mut _369: &str;
+    let mut _373: &mut Telemetry;
+    let mut _375: &mut Telemetry;
+    let mut _376: bool;
+    let mut _377: &Telemetry;
+    let mut _378: &Telemetry;
+    let mut _379: bool;
+    let mut _380: &();
+    let mut _381: &();
+    let mut _382: &str;
+    let mut _386: &mut Telemetry;
+    let mut _388: &mut Telemetry;
+    let mut _389: bool;
+    let mut _390: &Telemetry;
+    let mut _391: &Telemetry;
+    let mut _392: bool;
+    let mut _393: &();
+    let mut _394: &();
+    let mut _395: &str;
+    let mut _396: core::ops::Range<usize>;
+    let mut _397: core::ops::Range<usize>;
+    let mut _399: core::option::Option<usize>;
+    let mut _400: &mut core::ops::Range<usize>;
+    let mut _401: isize;
+    let mut _406: &mut Telemetry;
+    let mut _407: u32;
+    let mut _408: u32;
+    let mut _409: (u32, bool);
+    let mut _411: &mut Telemetry;
+    let mut _412: u32;
+    let mut _413: u32;
+    let mut _414: (u32, bool);
+    let mut _415: bool;
+    let mut _416: &Telemetry;
+    let mut _417: &Telemetry;
+    let mut _418: bool;
+    let mut _419: &();
+    let mut _420: &();
+    let mut _421: &str;
+    let mut _425: &mut Telemetry;
+    let mut _427: &mut Telemetry;
+    let mut _428: bool;
+    let mut _429: &Telemetry;
+    let mut _430: &Telemetry;
+    let mut _431: bool;
+    let mut _432: &str;
+    let _434: ();
+    let mut _435: &mut Telemetry;
+    let mut _436: bool;
+    let mut _437: &Telemetry;
+    let mut _438: &Telemetry;
+    let _439: Telemetry;
+    let mut _440: &str;
+    let _442: ();
+    let mut _443: &mut Telemetry;
+    let mut _444: bool;
+    let mut _445: &[u32; 8];
+    let mut _446: &[u32; 8];
+    let mut _447: &str;
+    let _450: ();
+    let mut _451: &mut State;
+    let mut _452: &mut State;
+    let mut _453: bool;
+    let mut _454: u32;
+    let mut _455: bool;
+    let mut _456: u32;
+    let mut _457: &str;
+    let _458: ();
+    let mut _459: &mut State;
+    let mut _460: bool;
+    let mut _461: u32;
+    let mut _462: &str;
+    let mut _463: bool;
+    let mut _464: u32;
+    let mut _465: &mut State;
+    let mut _466: &str;
+    let mut _467: &u32;
+    scope 1 {
+        debug state => _1;
+        let mut _17: State;
+        scope 2 {
+            debug state => _17;
+            let mut _30: State;
+            scope 3 {
+                debug state => _30;
+                let mut _41: State;
+                scope 4 {
+                    debug state => _41;
+                    let _51: State;
+                    scope 5 {
+                        debug replacement => _51;
+                        let mut _54: State;
+                        scope 6 {
+                            debug state => _54;
+                            let mut _61: State;
+                            scope 7 {
+                                debug state => _61;
+                                let mut _71: State;
+                                scope 8 {
+                                    debug state => _71;
+                                    let mut _79: State;
+                                    scope 9 {
+                                        debug state => _79;
+                                        let mut _94: State;
+                                        scope 10 {
+                                            debug state => _94;
+                                            let _100: u32;
+                                            scope 11 {
+                                                debug label => _100;
+                                                let mut _101: WithShared<'_>;
+                                                scope 12 {
+                                                    debug shared => _101;
+                                                    let mut _111: Nested;
+                                                    scope 13 {
+                                                        debug nested => _111;
+                                                        let mut _119: (u8, u32);
+                                                        scope 14 {
+                                                            debug generic => _119;
+                                                            let mut _130: core::array::IntoIter<State, 2>;
+                                                            let mut _287: core::array::IntoIter<Telemetry, 2>;
+                                                            let mut _433: Telemetry;
+                                                            scope 15 {
+                                                                debug iter => _130;
+                                                                let _134: State;
+                                                                scope 16 {
+                                                                    debug state => _134;
+                                                                    let mut _135: State;
+                                                                    let mut _148: State;
+                                                                    let mut _161: State;
+                                                                    let mut _174: State;
+                                                                    let mut _189: State;
+                                                                    let mut _202: State;
+                                                                    let mut _219: core::ops::Range<usize>;
+                                                                    let mut _237: State;
+                                                                    let mut _248: State;
+                                                                    let mut _259: State;
+                                                                    let mut _270: State;
+                                                                    scope 17 {
+                                                                        debug protected => _135;
+                                                                        let mut _136: State;
+                                                                        scope 18 {
+                                                                            debug plain => _136;
+                                                                            let _137: ();
+                                                                            scope 19 {
+                                                                                debug protected_ret => const ();
+                                                                                let _139: ();
+                                                                                scope 20 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 21 {
+                                                                        debug protected => _148;
+                                                                        let mut _149: State;
+                                                                        scope 22 {
+                                                                            debug plain => _149;
+                                                                            let _150: ();
+                                                                            scope 23 {
+                                                                                debug protected_ret => const ();
+                                                                                let _152: ();
+                                                                                scope 24 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 25 {
+                                                                        debug protected => _161;
+                                                                        let mut _162: State;
+                                                                        scope 26 {
+                                                                            debug plain => _162;
+                                                                            let _163: ();
+                                                                            scope 27 {
+                                                                                debug protected_ret => const ();
+                                                                                let _165: ();
+                                                                                scope 28 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 29 {
+                                                                        debug protected => _174;
+                                                                        let mut _175: State;
+                                                                        scope 30 {
+                                                                            debug plain => _175;
+                                                                            let _176: ();
+                                                                            scope 31 {
+                                                                                debug protected_ret => const ();
+                                                                                let _179: ();
+                                                                                scope 32 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 33 {
+                                                                        debug protected => _189;
+                                                                        let mut _190: State;
+                                                                        scope 34 {
+                                                                            debug plain => _190;
+                                                                            let _191: ();
+                                                                            scope 35 {
+                                                                                debug protected_ret => const ();
+                                                                                let _193: ();
+                                                                                scope 36 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 37 {
+                                                                        debug protected => _202;
+                                                                        let mut _203: State;
+                                                                        scope 38 {
+                                                                            debug plain => _203;
+                                                                            let _204: ();
+                                                                            scope 39 {
+                                                                                debug protected_ret => const ();
+                                                                                let _207: ();
+                                                                                scope 40 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 41 {
+                                                                        debug iter => _219;
+                                                                        let _223: usize;
+                                                                        scope 42 {
+                                                                            debug i => _223;
+                                                                            let mut _224: State;
+                                                                            scope 43 {
+                                                                                debug protected => _224;
+                                                                                let mut _225: State;
+                                                                                scope 44 {
+                                                                                    debug plain => _225;
+                                                                                    let _226: ();
+                                                                                    scope 45 {
+                                                                                        debug protected_ret => const ();
+                                                                                        let _228: ();
+                                                                                        scope 46 {
+                                                                                            debug plain_ret => const ();
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 47 {
+                                                                        debug protected => _237;
+                                                                        let mut _238: State;
+                                                                        scope 48 {
+                                                                            debug plain => _238;
+                                                                            let _239: u32;
+                                                                            scope 49 {
+                                                                                debug protected_ret => _239;
+                                                                                let _241: u32;
+                                                                                scope 50 {
+                                                                                    debug plain_ret => _241;
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 51 {
+                                                                        debug protected => _248;
+                                                                        let mut _249: State;
+                                                                        scope 52 {
+                                                                            debug plain => _249;
+                                                                            let _250: u32;
+                                                                            scope 53 {
+                                                                                debug protected_ret => _250;
+                                                                                let _252: u32;
+                                                                                scope 54 {
+                                                                                    debug plain_ret => _252;
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 55 {
+                                                                        debug protected => _259;
+                                                                        let mut _260: State;
+                                                                        scope 56 {
+                                                                            debug plain => _260;
+                                                                            let _261: u32;
+                                                                            scope 57 {
+                                                                                debug protected_ret => _261;
+                                                                                let _263: u32;
+                                                                                scope 58 {
+                                                                                    debug plain_ret => _263;
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 59 {
+                                                                        debug protected => _270;
+                                                                        let mut _271: State;
+                                                                        scope 60 {
+                                                                            debug plain => _271;
+                                                                            let _272: ();
+                                                                            scope 61 {
+                                                                                debug protected_ret => const ();
+                                                                                let _274: ();
+                                                                                scope 62 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            scope 63 {
+                                                                debug iter => _287;
+                                                                let _291: Telemetry;
+                                                                scope 64 {
+                                                                    debug t => _291;
+                                                                    let mut _292: Telemetry;
+                                                                    let mut _305: Telemetry;
+                                                                    let mut _318: Telemetry;
+                                                                    let mut _331: Telemetry;
+                                                                    let mut _344: Telemetry;
+                                                                    let mut _357: Telemetry;
+                                                                    let mut _370: Telemetry;
+                                                                    let mut _383: Telemetry;
+                                                                    let mut _398: core::ops::Range<usize>;
+                                                                    let mut _422: Telemetry;
+                                                                    scope 65 {
+                                                                        debug protected => _292;
+                                                                        let mut _293: Telemetry;
+                                                                        scope 66 {
+                                                                            debug plain => _293;
+                                                                            let _294: ();
+                                                                            scope 67 {
+                                                                                debug protected_ret => const ();
+                                                                                let _296: ();
+                                                                                scope 68 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 69 {
+                                                                        debug protected => _305;
+                                                                        let mut _306: Telemetry;
+                                                                        scope 70 {
+                                                                            debug plain => _306;
+                                                                            let _307: ();
+                                                                            scope 71 {
+                                                                                debug protected_ret => const ();
+                                                                                let _309: ();
+                                                                                scope 72 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 73 {
+                                                                        debug protected => _318;
+                                                                        let mut _319: Telemetry;
+                                                                        scope 74 {
+                                                                            debug plain => _319;
+                                                                            let _320: ();
+                                                                            scope 75 {
+                                                                                debug protected_ret => const ();
+                                                                                let _322: ();
+                                                                                scope 76 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 77 {
+                                                                        debug protected => _331;
+                                                                        let mut _332: Telemetry;
+                                                                        scope 78 {
+                                                                            debug plain => _332;
+                                                                            let _333: ();
+                                                                            scope 79 {
+                                                                                debug protected_ret => const ();
+                                                                                let _335: ();
+                                                                                scope 80 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 81 {
+                                                                        debug protected => _344;
+                                                                        let mut _345: Telemetry;
+                                                                        scope 82 {
+                                                                            debug plain => _345;
+                                                                            let _346: ();
+                                                                            scope 83 {
+                                                                                debug protected_ret => const ();
+                                                                                let _348: ();
+                                                                                scope 84 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 85 {
+                                                                        debug protected => _357;
+                                                                        let mut _358: Telemetry;
+                                                                        scope 86 {
+                                                                            debug plain => _358;
+                                                                            let _359: ();
+                                                                            scope 87 {
+                                                                                debug protected_ret => const ();
+                                                                                let _361: ();
+                                                                                scope 88 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 89 {
+                                                                        debug protected => _370;
+                                                                        let mut _371: Telemetry;
+                                                                        scope 90 {
+                                                                            debug plain => _371;
+                                                                            let _372: ();
+                                                                            scope 91 {
+                                                                                debug protected_ret => const ();
+                                                                                let _374: ();
+                                                                                scope 92 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 93 {
+                                                                        debug protected => _383;
+                                                                        let mut _384: Telemetry;
+                                                                        scope 94 {
+                                                                            debug plain => _384;
+                                                                            let _385: ();
+                                                                            scope 95 {
+                                                                                debug protected_ret => const ();
+                                                                                let _387: ();
+                                                                                scope 96 {
+                                                                                    debug plain_ret => const ();
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 97 {
+                                                                        debug iter => _398;
+                                                                        let _402: usize;
+                                                                        scope 98 {
+                                                                            debug i => _402;
+                                                                            let mut _403: Telemetry;
+                                                                            scope 99 {
+                                                                                debug protected => _403;
+                                                                                let mut _404: Telemetry;
+                                                                                scope 100 {
+                                                                                    debug plain => _404;
+                                                                                    let _405: ();
+                                                                                    scope 101 {
+                                                                                        debug protected_ret => const ();
+                                                                                        let _410: ();
+                                                                                        scope 102 {
+                                                                                            debug plain_ret => const ();
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    scope 103 {
+                                                                        debug protected => _422;
+                                                                        let mut _423: Telemetry;
+                                                                        scope 104 {
+                                                                            debug plain => _423;
+                                                                            let _424: u32;
+                                                                            scope 105 {
+                                                                                debug protected_ret => _424;
+                                                                                let _426: u32;
+                                                                                scope 106 {
+                                                                                    debug plain_ret => _426;
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            scope 107 {
+                                                                debug t => _433;
+                                                                let mut _441: Telemetry;
+                                                                scope 108 {
+                                                                    debug t => _441;
+                                                                    let mut _448: State;
+                                                                    scope 109 {
+                                                                        debug state => _448;
+                                                                        let mut _449: State;
+                                                                        scope 110 {
+                                                                            debug other => _449;
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    bb0: {
+        _1 = sample_state() -> [return: bb1, unwind continue];
+    }
+
+    bb1: {
+        _3 = &mut _1;
+        _2 = basic_field(copy _3) -> [return: bb2, unwind continue];
+    }
+
+    bb2: {
+        _5 = copy ((_1.0: Position).0: u32);
+        _4 = Eq(move _5, const 11_u32);
+        switchInt(move _4) -> [0: bb4, otherwise: bb3];
+    }
+
+    bb3: {
+        _8 = copy ((_1.0: Position).1: u32);
+        _7 = Eq(move _8, const 20_u32);
+        switchInt(move _7) -> [0: bb6, otherwise: bb5];
+    }
+
+    bb4: {
+        _6 = const "basic_field: the committed field reaches the caller";
+        _0 = Result::<(), &str>::Err(move _6);
+        goto -> bb275;
+    }
+
+    bb5: {
+        _11 = copy (_1.1: u32);
+        _10 = Eq(move _11, const 30_u32);
+        switchInt(move _10) -> [0: bb8, otherwise: bb7];
+    }
+
+    bb6: {
+        _9 = const "basic_field: an uncommitted sibling field is untouched";
+        _0 = Result::<(), &str>::Err(move _9);
+        goto -> bb275;
+    }
+
+    bb7: {
+        _14 = &(_1.2: [u32; 4]);
+        _15 = const run_checks::promoted[5];
+        _13 = <[u32; 4] as PartialEq>::eq(move _14, move _15) -> [return: bb9, unwind continue];
+    }
+
+    bb8: {
+        _12 = const "basic_field: an uncommitted field is untouched";
+        _0 = Result::<(), &str>::Err(move _12);
+        goto -> bb275;
+    }
+
+    bb9: {
+        switchInt(move _13) -> [0: bb11, otherwise: bb10];
+    }
+
+    bb10: {
+        _17 = sample_state() -> [return: bb12, unwind continue];
+    }
+
+    bb11: {
+        _16 = const "basic_field: an uncommitted array is untouched";
+        _0 = Result::<(), &str>::Err(move _16);
+        goto -> bb275;
+    }
+
+    bb12: {
+        _19 = &mut _17;
+        _18 = conditional_write(copy _19, const false) -> [return: bb13, unwind continue];
+    }
+
+    bb13: {
+        _21 = &_17;
+        _23 = sample_state() -> [return: bb14, unwind continue];
+    }
+
+    bb14: {
+        _22 = &_23;
+        _20 = <State as PartialEq>::eq(move _21, move _22) -> [return: bb15, unwind continue];
+    }
+
+    bb15: {
+        switchInt(move _20) -> [0: bb17, otherwise: bb16];
+    }
+
+    bb16: {
+        _26 = &mut _17;
+        _25 = conditional_write(copy _26, const true) -> [return: bb18, unwind continue];
+    }
+
+    bb17: {
+        _24 = const "conditional_write: the untaken branch changes nothing";
+        _0 = Result::<(), &str>::Err(move _24);
+        goto -> bb275;
+    }
+
+    bb18: {
+        _28 = copy ((_17.0: Position).0: u32);
+        _27 = Eq(move _28, const 11_u32);
+        switchInt(move _27) -> [0: bb20, otherwise: bb19];
+    }
+
+    bb19: {
+        _30 = sample_state() -> [return: bb21, unwind continue];
+    }
+
+    bb20: {
+        _29 = const "conditional_write: the taken branch commits";
+        _0 = Result::<(), &str>::Err(move _29);
+        goto -> bb275;
+    }
+
+    bb21: {
+        _32 = &mut _30;
+        _33 = Position { x: const 1_u32, y: const 2_u32 };
+        _31 = overlapping_writes(copy _32, move _33) -> [return: bb22, unwind continue];
+    }
+
+    bb22: {
+        _35 = &(_30.0: Position);
+        _36 = const run_checks::promoted[4];
+        _34 = <Position as PartialEq>::eq(move _35, move _36) -> [return: bb23, unwind continue];
+    }
+
+    bb23: {
+        switchInt(move _34) -> [0: bb25, otherwise: bb24];
+    }
+
+    bb24: {
+        _39 = copy (_30.1: u32);
+        _38 = Eq(move _39, const 30_u32);
+        switchInt(move _38) -> [0: bb27, otherwise: bb26];
+    }
+
+    bb25: {
+        _37 = const "overlapping_writes: parent commit wins";
+        _0 = Result::<(), &str>::Err(move _37);
+        goto -> bb275;
+    }
+
+    bb26: {
+        _41 = sample_state() -> [return: bb28, unwind continue];
+    }
+
+    bb27: {
+        _40 = const "overlapping_writes: an unrelated field is untouched";
+        _0 = Result::<(), &str>::Err(move _40);
+        goto -> bb275;
+    }
+
+    bb28: {
+        _43 = &mut _41;
+        _42 = sibling_fields(copy _43) -> [return: bb29, unwind continue];
+    }
+
+    bb29: {
+        _45 = &(_41.0: Position);
+        _46 = const run_checks::promoted[3];
+        _44 = <Position as PartialEq>::eq(move _45, move _46) -> [return: bb30, unwind continue];
+    }
+
+    bb30: {
+        switchInt(move _44) -> [0: bb32, otherwise: bb31];
+    }
+
+    bb31: {
+        _49 = copy (_41.1: u32);
+        _48 = Eq(move _49, const 31_u32);
+        switchInt(move _48) -> [0: bb34, otherwise: bb33];
+    }
+
+    bb32: {
+        _47 = const "sibling_fields: only `y` is committed";
+        _0 = Result::<(), &str>::Err(move _47);
+        goto -> bb275;
+    }
+
+    bb33: {
+        _52 = Position { x: const 1_u32, y: const 2_u32 };
+        _53 = [const 4_u32, const 4_u32, const 4_u32, const 4_u32];
+        _51 = State { position: move _52, counter: const 3_u32, samples: move _53 };
+        _54 = sample_state() -> [return: bb35, unwind continue];
+    }
+
+    bb34: {
+        _50 = const "sibling_fields: the sibling entry is committed too";
+        _0 = Result::<(), &str>::Err(move _50);
+        goto -> bb275;
+    }
+
+    bb35: {
+        _56 = &mut _54;
+        _55 = whole_state(copy _56, copy _51) -> [return: bb36, unwind continue];
+    }
+
+    bb36: {
+        _58 = &_54;
+        _59 = &_51;
+        _57 = <State as PartialEq>::eq(move _58, move _59) -> [return: bb37, unwind continue];
+    }
+
+    bb37: {
+        switchInt(move _57) -> [0: bb39, otherwise: bb38];
+    }
+
+    bb38: {
+        _61 = sample_state() -> [return: bb40, unwind continue];
+    }
+
+    bb39: {
+        _60 = const "whole_state: the whole pointee is committed";
+        _0 = Result::<(), &str>::Err(move _60);
+        goto -> bb275;
+    }
+
+    bb40: {
+        _63 = &mut _61;
+        _62 = indexed_write(copy _63, const 2_usize) -> [return: bb41, unwind continue];
+    }
+
+    bb41: {
+        _65 = &(_61.2: [u32; 4]);
+        _66 = const run_checks::promoted[2];
+        _64 = <[u32; 4] as PartialEq>::eq(move _65, move _66) -> [return: bb42, unwind continue];
+    }
+
+    bb42: {
+        switchInt(move _64) -> [0: bb44, otherwise: bb43];
+    }
+
+    bb43: {
+        _69 = copy (_61.1: u32);
+        _68 = Eq(move _69, const 30_u32);
+        switchInt(move _68) -> [0: bb46, otherwise: bb45];
+    }
+
+    bb44: {
+        _67 = const "indexed_write: the widened array commit is exact";
+        _0 = Result::<(), &str>::Err(move _67);
+        goto -> bb275;
+    }
+
+    bb45: {
+        _71 = sample_state() -> [return: bb47, unwind continue];
+    }
+
+    bb46: {
+        _70 = const "indexed_write: an unrelated field is untouched";
+        _0 = Result::<(), &str>::Err(move _70);
+        goto -> bb275;
+    }
+
+    bb47: {
+        _74 = &mut _71;
+        _73 = with_return_value(copy _74) -> [return: bb48, unwind continue];
+    }
+
+    bb48: {
+        _72 = Eq(move _73, const 41_u32);
+        switchInt(move _72) -> [0: bb50, otherwise: bb49];
+    }
+
+    bb49: {
+        _77 = copy (_71.1: u32);
+        _76 = Eq(move _77, const 31_u32);
+        switchInt(move _76) -> [0: bb52, otherwise: bb51];
+    }
+
+    bb50: {
+        _75 = const "with_return_value: `_0` survives the commit";
+        _0 = Result::<(), &str>::Err(move _75);
+        goto -> bb275;
+    }
+
+    bb51: {
+        _79 = sample_state() -> [return: bb53, unwind continue];
+    }
+
+    bb52: {
+        _78 = const "with_return_value: the commit still happens";
+        _0 = Result::<(), &str>::Err(move _78);
+        goto -> bb275;
+    }
+
+    bb53: {
+        _82 = &mut _79;
+        _81 = multiple_returns(copy _82, const true) -> [return: bb54, unwind continue];
+    }
+
+    bb54: {
+        _80 = Eq(move _81, const 30_u32);
+        switchInt(move _80) -> [0: bb56, otherwise: bb55];
+    }
+
+    bb55: {
+        _85 = copy (_79.1: u32);
+        _84 = Eq(move _85, const 30_u32);
+        switchInt(move _84) -> [0: bb58, otherwise: bb57];
+    }
+
+    bb56: {
+        _83 = const "multiple_returns: early return value";
+        _0 = Result::<(), &str>::Err(move _83);
+        goto -> bb275;
+    }
+
+    bb57: {
+        _89 = &mut _79;
+        _88 = multiple_returns(copy _89, const false) -> [return: bb59, unwind continue];
+    }
+
+    bb58: {
+        _86 = const "multiple_returns: the early return commits the unchanged field";
+        _0 = Result::<(), &str>::Err(move _86);
+        goto -> bb275;
+    }
+
+    bb59: {
+        _87 = Eq(move _88, const 31_u32);
+        switchInt(move _87) -> [0: bb61, otherwise: bb60];
+    }
+
+    bb60: {
+        _92 = copy (_79.1: u32);
+        _91 = Eq(move _92, const 31_u32);
+        switchInt(move _91) -> [0: bb63, otherwise: bb62];
+    }
+
+    bb61: {
+        _90 = const "multiple_returns: late return value";
+        _0 = Result::<(), &str>::Err(move _90);
+        goto -> bb275;
+    }
+
+    bb62: {
+        _94 = sample_state() -> [return: bb64, unwind continue];
+    }
+
+    bb63: {
+        _93 = const "multiple_returns: the late return commits";
+        _0 = Result::<(), &str>::Err(move _93);
+        goto -> bb275;
+    }
+
+    bb64: {
+        _96 = &mut _94;
+        _95 = panics_before_commit(copy _96, const false) -> [return: bb65, unwind continue];
+    }
+
+    bb65: {
+        _98 = copy (_94.1: u32);
+        _97 = Eq(move _98, const 31_u32);
+        switchInt(move _97) -> [0: bb67, otherwise: bb66];
+    }
+
+    bb66: {
+        _100 = const 7_u32;
+        _102 = &_100;
+        _101 = WithShared::<'_> { counter: const 1_u32, label: copy _102 };
+        _104 = &mut _101;
+        _103 = shared_ref_state(copy _104) -> [return: bb68, unwind continue];
+    }
+
+    bb67: {
+        _99 = const "panics_before_commit: the non-panicking path commits";
+        _0 = Result::<(), &str>::Err(move _99);
+        goto -> bb275;
+    }
+
+    bb68: {
+        _106 = copy (_101.0: u32);
+        _105 = Eq(move _106, const 2_u32);
+        switchInt(move _105) -> [0: bb70, otherwise: bb69];
+    }
+
+    bb69: {
+        _467 = copy (_101.1: &u32);
+        _109 = copy (*_467);
+        _108 = Eq(move _109, const 7_u32);
+        switchInt(move _108) -> [0: bb72, otherwise: bb71];
+    }
+
+    bb70: {
+        _107 = const "shared_ref_state: a shared reference in the state is fine";
+        _0 = Result::<(), &str>::Err(move _107);
+        goto -> bb275;
+    }
+
+    bb71: {
+        _113 = null_mut::<u32>() -> [return: bb73, unwind continue];
+    }
+
+    bb72: {
+        _110 = const "shared_ref_state: the shared reference survives the round trip";
+        _0 = Result::<(), &str>::Err(move _110);
+        goto -> bb275;
+    }
+
+    bb73: {
+        _112 = WithPtr { counter: const 1_u32, elsewhere: move _113 };
+        _111 = Nested { inner: move _112 };
+        _115 = &mut _111;
+        _114 = nested_raw_ptr_state(copy _115) -> [return: bb74, unwind continue];
+    }
+
+    bb74: {
+        _117 = copy ((_111.0: WithPtr).0: u32);
+        _116 = Eq(move _117, const 2_u32);
+        switchInt(move _116) -> [0: bb76, otherwise: bb75];
+    }
+
+    bb75: {
+        _119 = (const 1_u8, const 2_u32);
+        _121 = &mut _119;
+        _120 = generic_state::<u8>(copy _121) -> [return: bb77, unwind continue];
+    }
+
+    bb76: {
+        _118 = const "nested_raw_ptr_state: unchanged behaviour";
+        _0 = Result::<(), &str>::Err(move _118);
+        goto -> bb275;
+    }
+
+    bb77: {
+        _123 = &_119;
+        _124 = const run_checks::promoted[1];
+        _122 = <(u8, u32) as PartialEq>::eq(move _123, move _124) -> [return: bb78, unwind continue];
+    }
+
+    bb78: {
+        switchInt(move _122) -> [0: bb80, otherwise: bb79];
+    }
+
+    bb79: {
+        _128 = sample_state() -> [return: bb81, unwind continue];
+    }
+
+    bb80: {
+        _125 = const "generic_state: unchanged behaviour";
+        _0 = Result::<(), &str>::Err(move _125);
+        goto -> bb275;
+    }
+
+    bb81: {
+        _129 = other_state() -> [return: bb82, unwind continue];
+    }
+
+    bb82: {
+        _127 = [move _128, move _129];
+        _126 = <[State; 2] as IntoIterator>::into_iter(move _127) -> [return: bb83, unwind continue];
+    }
+
+    bb83: {
+        _130 = move _126;
+        goto -> bb84;
+    }
+
+    bb84: {
+        _132 = &mut _130;
+        _131 = <core::array::IntoIter<State, 2> as Iterator>::next(copy _132) -> [return: bb85, unwind: bb277];
+    }
+
+    bb85: {
+        _133 = discriminant(_131);
+        switchInt(move _133) -> [0: bb88, 1: bb87, otherwise: bb86];
+    }
+
+    bb86: {
+        unreachable;
+    }
+
+    bb87: {
+        _134 = copy ((_131 as Some).0: State);
+        _135 = copy _134;
+        _136 = copy _134;
+        _138 = &mut _135;
+        _137 = basic_field(copy _138) -> [return: bb89, unwind: bb277];
+    }
+
+    bb88: {
+        drop(_130) -> [return: bb168, unwind continue];
+    }
+
+    bb89: {
+        _140 = &mut _136;
+        _139 = basic_field_plain(copy _140) -> [return: bb90, unwind: bb277];
+    }
+
+    bb90: {
+        _142 = &_135;
+        _143 = &_136;
+        _141 = <State as PartialEq>::eq(move _142, move _143) -> [return: bb91, unwind: bb277];
+    }
+
+    bb91: {
+        switchInt(move _141) -> [0: bb95, otherwise: bb92];
+    }
+
+    bb92: {
+        _145 = &_137;
+        _146 = &_139;
+        _144 = <() as PartialEq>::eq(move _145, move _146) -> [return: bb93, unwind: bb277];
+    }
+
+    bb93: {
+        switchInt(move _144) -> [0: bb95, otherwise: bb94];
+    }
+
+    bb94: {
+        _148 = copy _134;
+        _149 = copy _134;
+        _151 = &mut _148;
+        _150 = conditional_write(copy _151, const false) -> [return: bb96, unwind: bb277];
+    }
+
+    bb95: {
+        _147 = const "basic_field: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _147);
+        goto -> bb274;
+    }
+
+    bb96: {
+        _153 = &mut _149;
+        _152 = conditional_write_plain(copy _153, const false) -> [return: bb97, unwind: bb277];
+    }
+
+    bb97: {
+        _155 = &_148;
+        _156 = &_149;
+        _154 = <State as PartialEq>::eq(move _155, move _156) -> [return: bb98, unwind: bb277];
+    }
+
+    bb98: {
+        switchInt(move _154) -> [0: bb102, otherwise: bb99];
+    }
+
+    bb99: {
+        _158 = &_150;
+        _159 = &_152;
+        _157 = <() as PartialEq>::eq(move _158, move _159) -> [return: bb100, unwind: bb277];
+    }
+
+    bb100: {
+        switchInt(move _157) -> [0: bb102, otherwise: bb101];
+    }
+
+    bb101: {
+        _161 = copy _134;
+        _162 = copy _134;
+        _164 = &mut _161;
+        _163 = conditional_write(copy _164, const true) -> [return: bb103, unwind: bb277];
+    }
+
+    bb102: {
+        _160 = const "conditional_write: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _160);
+        goto -> bb274;
+    }
+
+    bb103: {
+        _166 = &mut _162;
+        _165 = conditional_write_plain(copy _166, const true) -> [return: bb104, unwind: bb277];
+    }
+
+    bb104: {
+        _168 = &_161;
+        _169 = &_162;
+        _167 = <State as PartialEq>::eq(move _168, move _169) -> [return: bb105, unwind: bb277];
+    }
+
+    bb105: {
+        switchInt(move _167) -> [0: bb109, otherwise: bb106];
+    }
+
+    bb106: {
+        _171 = &_163;
+        _172 = &_165;
+        _170 = <() as PartialEq>::eq(move _171, move _172) -> [return: bb107, unwind: bb277];
+    }
+
+    bb107: {
+        switchInt(move _170) -> [0: bb109, otherwise: bb108];
+    }
+
+    bb108: {
+        _174 = copy _134;
+        _175 = copy _134;
+        _177 = &mut _174;
+        _178 = Position { x: const 1_u32, y: const 2_u32 };
+        _176 = overlapping_writes(copy _177, move _178) -> [return: bb110, unwind: bb277];
+    }
+
+    bb109: {
+        _173 = const "conditional_write: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _173);
+        goto -> bb274;
+    }
+
+    bb110: {
+        _180 = &mut _175;
+        _181 = Position { x: const 1_u32, y: const 2_u32 };
+        _179 = overlapping_writes_plain(copy _180, move _181) -> [return: bb111, unwind: bb277];
+    }
+
+    bb111: {
+        _183 = &_174;
+        _184 = &_175;
+        _182 = <State as PartialEq>::eq(move _183, move _184) -> [return: bb112, unwind: bb277];
+    }
+
+    bb112: {
+        switchInt(move _182) -> [0: bb116, otherwise: bb113];
+    }
+
+    bb113: {
+        _186 = &_176;
+        _187 = &_179;
+        _185 = <() as PartialEq>::eq(move _186, move _187) -> [return: bb114, unwind: bb277];
+    }
+
+    bb114: {
+        switchInt(move _185) -> [0: bb116, otherwise: bb115];
+    }
+
+    bb115: {
+        _189 = copy _134;
+        _190 = copy _134;
+        _192 = &mut _189;
+        _191 = sibling_fields(copy _192) -> [return: bb117, unwind: bb277];
+    }
+
+    bb116: {
+        _188 = const "overlapping_writes: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _188);
+        goto -> bb274;
+    }
+
+    bb117: {
+        _194 = &mut _190;
+        _193 = sibling_fields_plain(copy _194) -> [return: bb118, unwind: bb277];
+    }
+
+    bb118: {
+        _196 = &_189;
+        _197 = &_190;
+        _195 = <State as PartialEq>::eq(move _196, move _197) -> [return: bb119, unwind: bb277];
+    }
+
+    bb119: {
+        switchInt(move _195) -> [0: bb123, otherwise: bb120];
+    }
+
+    bb120: {
+        _199 = &_191;
+        _200 = &_193;
+        _198 = <() as PartialEq>::eq(move _199, move _200) -> [return: bb121, unwind: bb277];
+    }
+
+    bb121: {
+        switchInt(move _198) -> [0: bb123, otherwise: bb122];
+    }
+
+    bb122: {
+        _202 = copy _134;
+        _203 = copy _134;
+        _205 = &mut _202;
+        _206 = other_state() -> [return: bb124, unwind: bb277];
+    }
+
+    bb123: {
+        _201 = const "sibling_fields: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _201);
+        goto -> bb274;
+    }
+
+    bb124: {
+        _204 = whole_state(copy _205, move _206) -> [return: bb125, unwind: bb277];
+    }
+
+    bb125: {
+        _208 = &mut _203;
+        _209 = other_state() -> [return: bb126, unwind: bb277];
+    }
+
+    bb126: {
+        _207 = whole_state_plain(copy _208, move _209) -> [return: bb127, unwind: bb277];
+    }
+
+    bb127: {
+        _211 = &_202;
+        _212 = &_203;
+        _210 = <State as PartialEq>::eq(move _211, move _212) -> [return: bb128, unwind: bb277];
+    }
+
+    bb128: {
+        switchInt(move _210) -> [0: bb132, otherwise: bb129];
+    }
+
+    bb129: {
+        _214 = &_204;
+        _215 = &_207;
+        _213 = <() as PartialEq>::eq(move _214, move _215) -> [return: bb130, unwind: bb277];
+    }
+
+    bb130: {
+        switchInt(move _213) -> [0: bb132, otherwise: bb131];
+    }
+
+    bb131: {
+        _218 = core::ops::Range::<usize> { start: const 0_usize, end: const 4_usize };
+        _217 = <core::ops::Range<usize> as IntoIterator>::into_iter(move _218) -> [return: bb133, unwind: bb277];
+    }
+
+    bb132: {
+        _216 = const "whole_state: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _216);
+        goto -> bb274;
+    }
+
+    bb133: {
+        _219 = move _217;
+        goto -> bb134;
+    }
+
+    bb134: {
+        _221 = &mut _219;
+        _220 = <core::ops::Range<usize> as Iterator>::next(copy _221) -> [return: bb135, unwind: bb277];
+    }
+
+    bb135: {
+        _222 = discriminant(_220);
+        switchInt(move _222) -> [0: bb137, 1: bb136, otherwise: bb86];
+    }
+
+    bb136: {
+        _223 = copy ((_220 as Some).0: usize);
+        _224 = copy _134;
+        _225 = copy _134;
+        _227 = &mut _224;
+        _226 = indexed_write(copy _227, copy _223) -> [return: bb138, unwind: bb277];
+    }
+
+    bb137: {
+        _237 = copy _134;
+        _238 = copy _134;
+        _240 = &mut _237;
+        _239 = with_return_value(copy _240) -> [return: bb144, unwind: bb277];
+    }
+
+    bb138: {
+        _229 = &mut _225;
+        _228 = indexed_write_plain(copy _229, copy _223) -> [return: bb139, unwind: bb277];
+    }
+
+    bb139: {
+        _231 = &_224;
+        _232 = &_225;
+        _230 = <State as PartialEq>::eq(move _231, move _232) -> [return: bb140, unwind: bb277];
+    }
+
+    bb140: {
+        switchInt(move _230) -> [0: bb143, otherwise: bb141];
+    }
+
+    bb141: {
+        _234 = &_226;
+        _235 = &_228;
+        _233 = <() as PartialEq>::eq(move _234, move _235) -> [return: bb142, unwind: bb277];
+    }
+
+    bb142: {
+        switchInt(move _233) -> [0: bb143, otherwise: bb134];
+    }
+
+    bb143: {
+        _236 = const "indexed_write: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _236);
+        goto -> bb274;
+    }
+
+    bb144: {
+        _242 = &mut _238;
+        _241 = with_return_value_plain(copy _242) -> [return: bb145, unwind: bb277];
+    }
+
+    bb145: {
+        _244 = &_237;
+        _245 = &_238;
+        _243 = <State as PartialEq>::eq(move _244, move _245) -> [return: bb146, unwind: bb277];
+    }
+
+    bb146: {
+        switchInt(move _243) -> [0: bb149, otherwise: bb147];
+    }
+
+    bb147: {
+        _246 = Eq(copy _239, copy _241);
+        switchInt(move _246) -> [0: bb149, otherwise: bb148];
+    }
+
+    bb148: {
+        _248 = copy _134;
+        _249 = copy _134;
+        _251 = &mut _248;
+        _250 = multiple_returns(copy _251, const true) -> [return: bb150, unwind: bb277];
+    }
+
+    bb149: {
+        _247 = const "with_return_value: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _247);
+        goto -> bb274;
+    }
+
+    bb150: {
+        _253 = &mut _249;
+        _252 = multiple_returns_plain(copy _253, const true) -> [return: bb151, unwind: bb277];
+    }
+
+    bb151: {
+        _255 = &_248;
+        _256 = &_249;
+        _254 = <State as PartialEq>::eq(move _255, move _256) -> [return: bb152, unwind: bb277];
+    }
+
+    bb152: {
+        switchInt(move _254) -> [0: bb155, otherwise: bb153];
+    }
+
+    bb153: {
+        _257 = Eq(copy _250, copy _252);
+        switchInt(move _257) -> [0: bb155, otherwise: bb154];
+    }
+
+    bb154: {
+        _259 = copy _134;
+        _260 = copy _134;
+        _262 = &mut _259;
+        _261 = multiple_returns(copy _262, const false) -> [return: bb156, unwind: bb277];
+    }
+
+    bb155: {
+        _258 = const "multiple_returns: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _258);
+        goto -> bb274;
+    }
+
+    bb156: {
+        _264 = &mut _260;
+        _263 = multiple_returns_plain(copy _264, const false) -> [return: bb157, unwind: bb277];
+    }
+
+    bb157: {
+        _266 = &_259;
+        _267 = &_260;
+        _265 = <State as PartialEq>::eq(move _266, move _267) -> [return: bb158, unwind: bb277];
+    }
+
+    bb158: {
+        switchInt(move _265) -> [0: bb161, otherwise: bb159];
+    }
+
+    bb159: {
+        _268 = Eq(copy _261, copy _263);
+        switchInt(move _268) -> [0: bb161, otherwise: bb160];
+    }
+
+    bb160: {
+        _270 = copy _134;
+        _271 = copy _134;
+        _273 = &mut _270;
+        _272 = panics_before_commit(copy _273, const false) -> [return: bb162, unwind: bb277];
+    }
+
+    bb161: {
+        _269 = const "multiple_returns: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _269);
+        goto -> bb274;
+    }
+
+    bb162: {
+        _275 = &mut _271;
+        _274 = panics_before_commit_plain(copy _275, const false) -> [return: bb163, unwind: bb277];
+    }
+
+    bb163: {
+        _277 = &_270;
+        _278 = &_271;
+        _276 = <State as PartialEq>::eq(move _277, move _278) -> [return: bb164, unwind: bb277];
+    }
+
+    bb164: {
+        switchInt(move _276) -> [0: bb167, otherwise: bb165];
+    }
+
+    bb165: {
+        _280 = &_272;
+        _281 = &_274;
+        _279 = <() as PartialEq>::eq(move _280, move _281) -> [return: bb166, unwind: bb277];
+    }
+
+    bb166: {
+        switchInt(move _279) -> [0: bb167, otherwise: bb84];
+    }
+
+    bb167: {
+        _282 = const "panics_before_commit: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _282);
+        goto -> bb274;
+    }
+
+    bb168: {
+        _285 = sample_telemetry() -> [return: bb169, unwind continue];
+    }
+
+    bb169: {
+        _286 = other_telemetry() -> [return: bb170, unwind continue];
+    }
+
+    bb170: {
+        _284 = [move _285, move _286];
+        _283 = <[Telemetry; 2] as IntoIterator>::into_iter(move _284) -> [return: bb171, unwind continue];
+    }
+
+    bb171: {
+        _287 = move _283;
+        goto -> bb172;
+    }
+
+    bb172: {
+        _289 = &mut _287;
+        _288 = <core::array::IntoIter<Telemetry, 2> as Iterator>::next(copy _289) -> [return: bb173, unwind: bb276];
+    }
+
+    bb173: {
+        _290 = discriminant(_288);
+        switchInt(move _290) -> [0: bb175, 1: bb174, otherwise: bb86];
+    }
+
+    bb174: {
+        _291 = copy ((_288 as Some).0: Telemetry);
+        _292 = copy _291;
+        _293 = copy _291;
+        _295 = &mut _292;
+        _294 = read_only_field(copy _295) -> [return: bb176, unwind: bb276];
+    }
+
+    bb175: {
+        drop(_287) -> [return: bb250, unwind continue];
+    }
+
+    bb176: {
+        _297 = &mut _293;
+        _296 = read_only_field_plain(copy _297) -> [return: bb177, unwind: bb276];
+    }
+
+    bb177: {
+        _299 = &_292;
+        _300 = &_293;
+        _298 = <Telemetry as PartialEq>::eq(move _299, move _300) -> [return: bb178, unwind: bb276];
+    }
+
+    bb178: {
+        switchInt(move _298) -> [0: bb182, otherwise: bb179];
+    }
+
+    bb179: {
+        _302 = &_294;
+        _303 = &_296;
+        _301 = <() as PartialEq>::eq(move _302, move _303) -> [return: bb180, unwind: bb276];
+    }
+
+    bb180: {
+        switchInt(move _301) -> [0: bb182, otherwise: bb181];
+    }
+
+    bb181: {
+        _305 = copy _291;
+        _306 = copy _291;
+        _308 = &mut _305;
+        _307 = write_only_field(copy _308) -> [return: bb183, unwind: bb276];
+    }
+
+    bb182: {
+        _304 = const "read_only_field: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _304);
+        goto -> bb273;
+    }
+
+    bb183: {
+        _310 = &mut _306;
+        _309 = write_only_field_plain(copy _310) -> [return: bb184, unwind: bb276];
+    }
+
+    bb184: {
+        _312 = &_305;
+        _313 = &_306;
+        _311 = <Telemetry as PartialEq>::eq(move _312, move _313) -> [return: bb185, unwind: bb276];
+    }
+
+    bb185: {
+        switchInt(move _311) -> [0: bb189, otherwise: bb186];
+    }
+
+    bb186: {
+        _315 = &_307;
+        _316 = &_309;
+        _314 = <() as PartialEq>::eq(move _315, move _316) -> [return: bb187, unwind: bb276];
+    }
+
+    bb187: {
+        switchInt(move _314) -> [0: bb189, otherwise: bb188];
+    }
+
+    bb188: {
+        _318 = copy _291;
+        _319 = copy _291;
+        _321 = &mut _318;
+        _320 = write_under_if(copy _321, const false) -> [return: bb190, unwind: bb276];
+    }
+
+    bb189: {
+        _317 = const "write_only_field: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _317);
+        goto -> bb273;
+    }
+
+    bb190: {
+        _323 = &mut _319;
+        _322 = write_under_if_plain(copy _323, const false) -> [return: bb191, unwind: bb276];
+    }
+
+    bb191: {
+        _325 = &_318;
+        _326 = &_319;
+        _324 = <Telemetry as PartialEq>::eq(move _325, move _326) -> [return: bb192, unwind: bb276];
+    }
+
+    bb192: {
+        switchInt(move _324) -> [0: bb196, otherwise: bb193];
+    }
+
+    bb193: {
+        _328 = &_320;
+        _329 = &_322;
+        _327 = <() as PartialEq>::eq(move _328, move _329) -> [return: bb194, unwind: bb276];
+    }
+
+    bb194: {
+        switchInt(move _327) -> [0: bb196, otherwise: bb195];
+    }
+
+    bb195: {
+        _331 = copy _291;
+        _332 = copy _291;
+        _334 = &mut _331;
+        _333 = write_under_if(copy _334, const true) -> [return: bb197, unwind: bb276];
+    }
+
+    bb196: {
+        _330 = const "write_under_if: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _330);
+        goto -> bb273;
+    }
+
+    bb197: {
+        _336 = &mut _332;
+        _335 = write_under_if_plain(copy _336, const true) -> [return: bb198, unwind: bb276];
+    }
+
+    bb198: {
+        _338 = &_331;
+        _339 = &_332;
+        _337 = <Telemetry as PartialEq>::eq(move _338, move _339) -> [return: bb199, unwind: bb276];
+    }
+
+    bb199: {
+        switchInt(move _337) -> [0: bb203, otherwise: bb200];
+    }
+
+    bb200: {
+        _341 = &_333;
+        _342 = &_335;
+        _340 = <() as PartialEq>::eq(move _341, move _342) -> [return: bb201, unwind: bb276];
+    }
+
+    bb201: {
+        switchInt(move _340) -> [0: bb203, otherwise: bb202];
+    }
+
+    bb202: {
+        _344 = copy _291;
+        _345 = copy _291;
+        _347 = &mut _344;
+        _346 = untouched_fields(copy _347) -> [return: bb204, unwind: bb276];
+    }
+
+    bb203: {
+        _343 = const "write_under_if: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _343);
+        goto -> bb273;
+    }
+
+    bb204: {
+        _349 = &mut _345;
+        _348 = untouched_fields_plain(copy _349) -> [return: bb205, unwind: bb276];
+    }
+
+    bb205: {
+        _351 = &_344;
+        _352 = &_345;
+        _350 = <Telemetry as PartialEq>::eq(move _351, move _352) -> [return: bb206, unwind: bb276];
+    }
+
+    bb206: {
+        switchInt(move _350) -> [0: bb210, otherwise: bb207];
+    }
+
+    bb207: {
+        _354 = &_346;
+        _355 = &_348;
+        _353 = <() as PartialEq>::eq(move _354, move _355) -> [return: bb208, unwind: bb276];
+    }
+
+    bb208: {
+        switchInt(move _353) -> [0: bb210, otherwise: bb209];
+    }
+
+    bb209: {
+        _357 = copy _291;
+        _358 = copy _291;
+        _360 = &mut _357;
+        _359 = nested_siblings(copy _360) -> [return: bb211, unwind: bb276];
+    }
+
+    bb210: {
+        _356 = const "untouched_fields: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _356);
+        goto -> bb273;
+    }
+
+    bb211: {
+        _362 = &mut _358;
+        _361 = nested_siblings_plain(copy _362) -> [return: bb212, unwind: bb276];
+    }
+
+    bb212: {
+        _364 = &_357;
+        _365 = &_358;
+        _363 = <Telemetry as PartialEq>::eq(move _364, move _365) -> [return: bb213, unwind: bb276];
+    }
+
+    bb213: {
+        switchInt(move _363) -> [0: bb217, otherwise: bb214];
+    }
+
+    bb214: {
+        _367 = &_359;
+        _368 = &_361;
+        _366 = <() as PartialEq>::eq(move _367, move _368) -> [return: bb215, unwind: bb276];
+    }
+
+    bb215: {
+        switchInt(move _366) -> [0: bb217, otherwise: bb216];
+    }
+
+    bb216: {
+        _370 = copy _291;
+        _371 = copy _291;
+        _373 = &mut _370;
+        _372 = constant_index_expr(copy _373) -> [return: bb218, unwind: bb276];
+    }
+
+    bb217: {
+        _369 = const "nested_siblings: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _369);
+        goto -> bb273;
+    }
+
+    bb218: {
+        _375 = &mut _371;
+        _374 = constant_index_expr_plain(copy _375) -> [return: bb219, unwind: bb276];
+    }
+
+    bb219: {
+        _377 = &_370;
+        _378 = &_371;
+        _376 = <Telemetry as PartialEq>::eq(move _377, move _378) -> [return: bb220, unwind: bb276];
+    }
+
+    bb220: {
+        switchInt(move _376) -> [0: bb224, otherwise: bb221];
+    }
+
+    bb221: {
+        _380 = &_372;
+        _381 = &_374;
+        _379 = <() as PartialEq>::eq(move _380, move _381) -> [return: bb222, unwind: bb276];
+    }
+
+    bb222: {
+        switchInt(move _379) -> [0: bb224, otherwise: bb223];
+    }
+
+    bb223: {
+        _383 = copy _291;
+        _384 = copy _291;
+        _386 = &mut _383;
+        _385 = constant_index_pattern(copy _386) -> [return: bb225, unwind: bb276];
+    }
+
+    bb224: {
+        _382 = const "constant_index_expr: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _382);
+        goto -> bb273;
+    }
+
+    bb225: {
+        _388 = &mut _384;
+        _387 = constant_index_pattern_plain(copy _388) -> [return: bb226, unwind: bb276];
+    }
+
+    bb226: {
+        _390 = &_383;
+        _391 = &_384;
+        _389 = <Telemetry as PartialEq>::eq(move _390, move _391) -> [return: bb227, unwind: bb276];
+    }
+
+    bb227: {
+        switchInt(move _389) -> [0: bb231, otherwise: bb228];
+    }
+
+    bb228: {
+        _393 = &_385;
+        _394 = &_387;
+        _392 = <() as PartialEq>::eq(move _393, move _394) -> [return: bb229, unwind: bb276];
+    }
+
+    bb229: {
+        switchInt(move _392) -> [0: bb231, otherwise: bb230];
+    }
+
+    bb230: {
+        _397 = core::ops::Range::<usize> { start: const 0_usize, end: const 8_usize };
+        _396 = <core::ops::Range<usize> as IntoIterator>::into_iter(move _397) -> [return: bb232, unwind: bb276];
+    }
+
+    bb231: {
+        _395 = const "constant_index_pattern: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _395);
+        goto -> bb273;
+    }
+
+    bb232: {
+        _398 = move _396;
+        goto -> bb233;
+    }
+
+    bb233: {
+        _400 = &mut _398;
+        _399 = <core::ops::Range<usize> as Iterator>::next(copy _400) -> [return: bb234, unwind: bb276];
+    }
+
+    bb234: {
+        _401 = discriminant(_399);
+        switchInt(move _401) -> [0: bb236, 1: bb235, otherwise: bb86];
+    }
+
+    bb235: {
+        _402 = copy ((_399 as Some).0: usize);
+        _403 = copy _291;
+        _404 = copy _291;
+        _406 = &mut _403;
+        _408 = copy _402 as u32 (IntToInt);
+        _409 = AddWithOverflow(const 100_u32, copy _408);
+        assert(!move (_409.1: bool), "attempt to compute `{} + {}`, which would overflow", const 100_u32, move _408) -> [success: bb237, unwind: bb276];
+    }
+
+    bb236: {
+        _422 = copy _291;
+        _423 = copy _291;
+        _425 = &mut _422;
+        _424 = whole_value_read(copy _425) -> [return: bb245, unwind: bb276];
+    }
+
+    bb237: {
+        _407 = move (_409.0: u32);
+        _405 = runtime_index(copy _406, copy _402, move _407) -> [return: bb238, unwind: bb276];
+    }
+
+    bb238: {
+        _411 = &mut _404;
+        _413 = copy _402 as u32 (IntToInt);
+        _414 = AddWithOverflow(const 100_u32, copy _413);
+        assert(!move (_414.1: bool), "attempt to compute `{} + {}`, which would overflow", const 100_u32, move _413) -> [success: bb239, unwind: bb276];
+    }
+
+    bb239: {
+        _412 = move (_414.0: u32);
+        _410 = runtime_index_plain(copy _411, copy _402, move _412) -> [return: bb240, unwind: bb276];
+    }
+
+    bb240: {
+        _416 = &_403;
+        _417 = &_404;
+        _415 = <Telemetry as PartialEq>::eq(move _416, move _417) -> [return: bb241, unwind: bb276];
+    }
+
+    bb241: {
+        switchInt(move _415) -> [0: bb244, otherwise: bb242];
+    }
+
+    bb242: {
+        _419 = &_405;
+        _420 = &_410;
+        _418 = <() as PartialEq>::eq(move _419, move _420) -> [return: bb243, unwind: bb276];
+    }
+
+    bb243: {
+        switchInt(move _418) -> [0: bb244, otherwise: bb233];
+    }
+
+    bb244: {
+        _421 = const "runtime_index: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _421);
+        goto -> bb273;
+    }
+
+    bb245: {
+        _427 = &mut _423;
+        _426 = whole_value_read_plain(copy _427) -> [return: bb246, unwind: bb276];
+    }
+
+    bb246: {
+        _429 = &_422;
+        _430 = &_423;
+        _428 = <Telemetry as PartialEq>::eq(move _429, move _430) -> [return: bb247, unwind: bb276];
+    }
+
+    bb247: {
+        switchInt(move _428) -> [0: bb249, otherwise: bb248];
+    }
+
+    bb248: {
+        _431 = Eq(copy _424, copy _426);
+        switchInt(move _431) -> [0: bb249, otherwise: bb172];
+    }
+
+    bb249: {
+        _432 = const "whole_value_read: differs from its unprotected twin";
+        _0 = Result::<(), &str>::Err(move _432);
+        goto -> bb273;
+    }
+
+    bb250: {
+        _433 = sample_telemetry() -> [return: bb251, unwind continue];
+    }
+
+    bb251: {
+        _435 = &mut _433;
+        _434 = write_under_if(copy _435, const false) -> [return: bb252, unwind continue];
+    }
+
+    bb252: {
+        _437 = &_433;
+        _439 = sample_telemetry() -> [return: bb253, unwind continue];
+    }
+
+    bb253: {
+        _438 = &_439;
+        _436 = <Telemetry as PartialEq>::eq(move _437, move _438) -> [return: bb254, unwind continue];
+    }
+
+    bb254: {
+        switchInt(move _436) -> [0: bb256, otherwise: bb255];
+    }
+
+    bb255: {
+        _441 = sample_telemetry() -> [return: bb257, unwind continue];
+    }
+
+    bb256: {
+        _440 = const "write_under_if: the untaken branch changes nothing";
+        _0 = Result::<(), &str>::Err(move _440);
+        goto -> bb275;
+    }
+
+    bb257: {
+        _443 = &mut _441;
+        _442 = runtime_index(copy _443, const 5_usize, const 0_u32) -> [return: bb258, unwind continue];
+    }
+
+    bb258: {
+        _445 = &(_441.2: [u32; 8]);
+        _446 = const run_checks::promoted[0];
+        _444 = <[u32; 8] as PartialEq>::eq(move _445, move _446) -> [return: bb259, unwind continue];
+    }
+
+    bb259: {
+        switchInt(move _444) -> [0: bb261, otherwise: bb260];
+    }
+
+    bb260: {
+        _448 = sample_state() -> [return: bb262, unwind continue];
+    }
+
+    bb261: {
+        _447 = const "runtime_index: the other elements survive";
+        _0 = Result::<(), &str>::Err(move _447);
+        goto -> bb275;
+    }
+
+    bb262: {
+        _449 = copy _448;
+        _451 = &mut _449;
+        _452 = &mut _448;
+        _450 = two_mut_args(copy _451, copy _452) -> [return: bb263, unwind continue];
+    }
+
+    bb263: {
+        _454 = copy (_448.1: u32);
+        _453 = Eq(move _454, const 31_u32);
+        switchInt(move _453) -> [0: bb266, otherwise: bb264];
+    }
+
+    bb264: {
+        _456 = copy (_449.1: u32);
+        _455 = Eq(move _456, const 31_u32);
+        switchInt(move _455) -> [0: bb266, otherwise: bb265];
+    }
+
+    bb265: {
+        _459 = &mut _448;
+        _458 = mutable_reborrow(copy _459) -> [return: bb267, unwind continue];
+    }
+
+    bb266: {
+        _457 = const "two_mut_args: unchanged behaviour";
+        _0 = Result::<(), &str>::Err(move _457);
+        goto -> bb275;
+    }
+
+    bb267: {
+        _461 = copy (_448.1: u32);
+        _460 = Eq(move _461, const 32_u32);
+        switchInt(move _460) -> [0: bb269, otherwise: bb268];
+    }
+
+    bb268: {
+        _465 = &mut _448;
+        _464 = read_only(copy _465) -> [return: bb270, unwind continue];
+    }
+
+    bb269: {
+        _462 = const "mutable_reborrow: unchanged behaviour";
+        _0 = Result::<(), &str>::Err(move _462);
+        goto -> bb275;
+    }
+
+    bb270: {
+        _463 = Eq(move _464, const 42_u32);
+        switchInt(move _463) -> [0: bb272, otherwise: bb271];
+    }
+
+    bb271: {
+        _0 = Result::<(), &str>::Ok(const ());
+        goto -> bb275;
+    }
+
+    bb272: {
+        _466 = const "read_only: unchanged behaviour";
+        _0 = Result::<(), &str>::Err(move _466);
+        goto -> bb275;
+    }
+
+    bb273: {
+        drop(_287) -> [return: bb275, unwind continue];
+    }
+
+    bb274: {
+        drop(_130) -> [return: bb275, unwind continue];
+    }
+
+    bb275: {
+        return;
+    }
+
+    bb276 (cleanup): {
+        drop(_287) -> [return: bb278, unwind terminate(cleanup)];
+    }
+
+    bb277 (cleanup): {
+        drop(_130) -> [return: bb278, unwind terminate(cleanup)];
+    }
+
+    bb278 (cleanup): {
+        resume;
+    }
+}
+
+alloc66 (size: 30, align: 1) {
+    0x00 │ 72 65 61 64 5f 6f 6e 6c 79 3a 20 75 6e 63 68 61 │ read_only: uncha
+    0x10 │ 6e 67 65 64 20 62 65 68 61 76 69 6f 75 72       │ nged behaviour
+}
+
+alloc65 (size: 37, align: 1) {
+    0x00 │ 6d 75 74 61 62 6c 65 5f 72 65 62 6f 72 72 6f 77 │ mutable_reborrow
+    0x10 │ 3a 20 75 6e 63 68 61 6e 67 65 64 20 62 65 68 61 │ : unchanged beha
+    0x20 │ 76 69 6f 75 72                                  │ viour
+}
+
+alloc64 (size: 33, align: 1) {
+    0x00 │ 74 77 6f 5f 6d 75 74 5f 61 72 67 73 3a 20 75 6e │ two_mut_args: un
+    0x10 │ 63 68 61 6e 67 65 64 20 62 65 68 61 76 69 6f 75 │ changed behaviou
+    0x20 │ 72                                              │ r
+}
+
+alloc63 (size: 41, align: 1) {
+    0x00 │ 72 75 6e 74 69 6d 65 5f 69 6e 64 65 78 3a 20 74 │ runtime_index: t
+    0x10 │ 68 65 20 6f 74 68 65 72 20 65 6c 65 6d 65 6e 74 │ he other element
+    0x20 │ 73 20 73 75 72 76 69 76 65                      │ s survive
+}
+
+alloc62 (size: 50, align: 1) {
+    0x00 │ 77 72 69 74 65 5f 75 6e 64 65 72 5f 69 66 3a 20 │ write_under_if: 
+    0x10 │ 74 68 65 20 75 6e 74 61 6b 65 6e 20 62 72 61 6e │ the untaken bran
+    0x20 │ 63 68 20 63 68 61 6e 67 65 73 20 6e 6f 74 68 69 │ ch changes nothi
+    0x30 │ 6e 67                                           │ ng
+}
+
+alloc61 (size: 51, align: 1) {
+    0x00 │ 77 68 6f 6c 65 5f 76 61 6c 75 65 5f 72 65 61 64 │ whole_value_read
+    0x10 │ 3a 20 64 69 66 66 65 72 73 20 66 72 6f 6d 20 69 │ : differs from i
+    0x20 │ 74 73 20 75 6e 70 72 6f 74 65 63 74 65 64 20 74 │ ts unprotected t
+    0x30 │ 77 69 6e                                        │ win
+}
+
+alloc60 (size: 48, align: 1) {
+    0x00 │ 72 75 6e 74 69 6d 65 5f 69 6e 64 65 78 3a 20 64 │ runtime_index: d
+    0x10 │ 69 66 66 65 72 73 20 66 72 6f 6d 20 69 74 73 20 │ iffers from its 
+    0x20 │ 75 6e 70 72 6f 74 65 63 74 65 64 20 74 77 69 6e │ unprotected twin
+}
+
+alloc59 (size: 57, align: 1) {
+    0x00 │ 63 6f 6e 73 74 61 6e 74 5f 69 6e 64 65 78 5f 70 │ constant_index_p
+    0x10 │ 61 74 74 65 72 6e 3a 20 64 69 66 66 65 72 73 20 │ attern: differs 
+    0x20 │ 66 72 6f 6d 20 69 74 73 20 75 6e 70 72 6f 74 65 │ from its unprote
+    0x30 │ 63 74 65 64 20 74 77 69 6e                      │ cted twin
+}
+
+alloc58 (size: 54, align: 1) {
+    0x00 │ 63 6f 6e 73 74 61 6e 74 5f 69 6e 64 65 78 5f 65 │ constant_index_e
+    0x10 │ 78 70 72 3a 20 64 69 66 66 65 72 73 20 66 72 6f │ xpr: differs fro
+    0x20 │ 6d 20 69 74 73 20 75 6e 70 72 6f 74 65 63 74 65 │ m its unprotecte
+    0x30 │ 64 20 74 77 69 6e                               │ d twin
+}
+
+alloc57 (size: 50, align: 1) {
+    0x00 │ 6e 65 73 74 65 64 5f 73 69 62 6c 69 6e 67 73 3a │ nested_siblings:
+    0x10 │ 20 64 69 66 66 65 72 73 20 66 72 6f 6d 20 69 74 │  differs from it
+    0x20 │ 73 20 75 6e 70 72 6f 74 65 63 74 65 64 20 74 77 │ s unprotected tw
+    0x30 │ 69 6e                                           │ in
+}
+
+alloc56 (size: 51, align: 1) {
+    0x00 │ 75 6e 74 6f 75 63 68 65 64 5f 66 69 65 6c 64 73 │ untouched_fields
+    0x10 │ 3a 20 64 69 66 66 65 72 73 20 66 72 6f 6d 20 69 │ : differs from i
+    0x20 │ 74 73 20 75 6e 70 72 6f 74 65 63 74 65 64 20 74 │ ts unprotected t
+    0x30 │ 77 69 6e                                        │ win
+}
+
+alloc55 (size: 49, align: 1) {
+    0x00 │ 77 72 69 74 65 5f 75 6e 64 65 72 5f 69 66 3a 20 │ write_under_if: 
+    0x10 │ 64 69 66 66 65 72 73 20 66 72 6f 6d 20 69 74 73 │ differs from its
+    0x20 │ 20 75 6e 70 72 6f 74 65 63 74 65 64 20 74 77 69 │  unprotected twi
+    0x30 │ 6e                                              │ n
+}
+
+alloc54 (size: 51, align: 1) {
+    0x00 │ 77 72 69 74 65 5f 6f 6e 6c 79 5f 66 69 65 6c 64 │ write_only_field
+    0x10 │ 3a 20 64 69 66 66 65 72 73 20 66 72 6f 6d 20 69 │ : differs from i
+    0x20 │ 74 73 20 75 6e 70 72 6f 74 65 63 74 65 64 20 74 │ ts unprotected t
+    0x30 │ 77 69 6e                                        │ win
+}
+
+alloc53 (size: 50, align: 1) {
+    0x00 │ 72 65 61 64 5f 6f 6e 6c 79 5f 66 69 65 6c 64 3a │ read_only_field:
+    0x10 │ 20 64 69 66 66 65 72 73 20 66 72 6f 6d 20 69 74 │  differs from it
+    0x20 │ 73 20 75 6e 70 72 6f 74 65 63 74 65 64 20 74 77 │ s unprotected tw
+    0x30 │ 69 6e                                           │ in
+}
+
+alloc52 (size: 55, align: 1) {
+    0x00 │ 70 61 6e 69 63 73 5f 62 65 66 6f 72 65 5f 63 6f │ panics_before_co
+    0x10 │ 6d 6d 69 74 3a 20 64 69 66 66 65 72 73 20 66 72 │ mmit: differs fr
+    0x20 │ 6f 6d 20 69 74 73 20 75 6e 70 72 6f 74 65 63 74 │ om its unprotect
+    0x30 │ 65 64 20 74 77 69 6e                            │ ed twin
+}
+
+alloc51 (size: 51, align: 1) {
+    0x00 │ 6d 75 6c 74 69 70 6c 65 5f 72 65 74 75 72 6e 73 │ multiple_returns
+    0x10 │ 3a 20 64 69 66 66 65 72 73 20 66 72 6f 6d 20 69 │ : differs from i
+    0x20 │ 74 73 20 75 6e 70 72 6f 74 65 63 74 65 64 20 74 │ ts unprotected t
+    0x30 │ 77 69 6e                                        │ win
+}
+
+alloc50 (size: 52, align: 1) {
+    0x00 │ 77 69 74 68 5f 72 65 74 75 72 6e 5f 76 61 6c 75 │ with_return_valu
+    0x10 │ 65 3a 20 64 69 66 66 65 72 73 20 66 72 6f 6d 20 │ e: differs from 
+    0x20 │ 69 74 73 20 75 6e 70 72 6f 74 65 63 74 65 64 20 │ its unprotected 
+    0x30 │ 74 77 69 6e                                     │ twin
+}
+
+alloc49 (size: 48, align: 1) {
+    0x00 │ 69 6e 64 65 78 65 64 5f 77 72 69 74 65 3a 20 64 │ indexed_write: d
+    0x10 │ 69 66 66 65 72 73 20 66 72 6f 6d 20 69 74 73 20 │ iffers from its 
+    0x20 │ 75 6e 70 72 6f 74 65 63 74 65 64 20 74 77 69 6e │ unprotected twin
+}
+
+alloc48 (size: 46, align: 1) {
+    0x00 │ 77 68 6f 6c 65 5f 73 74 61 74 65 3a 20 64 69 66 │ whole_state: dif
+    0x10 │ 66 65 72 73 20 66 72 6f 6d 20 69 74 73 20 75 6e │ fers from its un
+    0x20 │ 70 72 6f 74 65 63 74 65 64 20 74 77 69 6e       │ protected twin
+}
+
+alloc47 (size: 49, align: 1) {
+    0x00 │ 73 69 62 6c 69 6e 67 5f 66 69 65 6c 64 73 3a 20 │ sibling_fields: 
+    0x10 │ 64 69 66 66 65 72 73 20 66 72 6f 6d 20 69 74 73 │ differs from its
+    0x20 │ 20 75 6e 70 72 6f 74 65 63 74 65 64 20 74 77 69 │  unprotected twi
+    0x30 │ 6e                                              │ n
+}
+
+alloc46 (size: 53, align: 1) {
+    0x00 │ 6f 76 65 72 6c 61 70 70 69 6e 67 5f 77 72 69 74 │ overlapping_writ
+    0x10 │ 65 73 3a 20 64 69 66 66 65 72 73 20 66 72 6f 6d │ es: differs from
+    0x20 │ 20 69 74 73 20 75 6e 70 72 6f 74 65 63 74 65 64 │  its unprotected
+    0x30 │ 20 74 77 69 6e                                  │  twin
+}
+
+alloc45 (size: 52, align: 1) {
+    0x00 │ 63 6f 6e 64 69 74 69 6f 6e 61 6c 5f 77 72 69 74 │ conditional_writ
+    0x10 │ 65 3a 20 64 69 66 66 65 72 73 20 66 72 6f 6d 20 │ e: differs from 
+    0x20 │ 69 74 73 20 75 6e 70 72 6f 74 65 63 74 65 64 20 │ its unprotected 
+    0x30 │ 74 77 69 6e                                     │ twin
+}
+
+alloc44 (size: 46, align: 1) {
+    0x00 │ 62 61 73 69 63 5f 66 69 65 6c 64 3a 20 64 69 66 │ basic_field: dif
+    0x10 │ 66 65 72 73 20 66 72 6f 6d 20 69 74 73 20 75 6e │ fers from its un
+    0x20 │ 70 72 6f 74 65 63 74 65 64 20 74 77 69 6e       │ protected twin
+}
+
+alloc43 (size: 34, align: 1) {
+    0x00 │ 67 65 6e 65 72 69 63 5f 73 74 61 74 65 3a 20 75 │ generic_state: u
+    0x10 │ 6e 63 68 61 6e 67 65 64 20 62 65 68 61 76 69 6f │ nchanged behavio
+    0x20 │ 75 72                                           │ ur
+}
+
+alloc42 (size: 41, align: 1) {
+    0x00 │ 6e 65 73 74 65 64 5f 72 61 77 5f 70 74 72 5f 73 │ nested_raw_ptr_s
+    0x10 │ 74 61 74 65 3a 20 75 6e 63 68 61 6e 67 65 64 20 │ tate: unchanged 
+    0x20 │ 62 65 68 61 76 69 6f 75 72                      │ behaviour
+}
+
+alloc41 (size: 62, align: 1) {
+    0x00 │ 73 68 61 72 65 64 5f 72 65 66 5f 73 74 61 74 65 │ shared_ref_state
+    0x10 │ 3a 20 74 68 65 20 73 68 61 72 65 64 20 72 65 66 │ : the shared ref
+    0x20 │ 65 72 65 6e 63 65 20 73 75 72 76 69 76 65 73 20 │ erence survives 
+    0x30 │ 74 68 65 20 72 6f 75 6e 64 20 74 72 69 70       │ the round trip
+}
+
+alloc40 (size: 57, align: 1) {
+    0x00 │ 73 68 61 72 65 64 5f 72 65 66 5f 73 74 61 74 65 │ shared_ref_state
+    0x10 │ 3a 20 61 20 73 68 61 72 65 64 20 72 65 66 65 72 │ : a shared refer
+    0x20 │ 65 6e 63 65 20 69 6e 20 74 68 65 20 73 74 61 74 │ ence in the stat
+    0x30 │ 65 20 69 73 20 66 69 6e 65                      │ e is fine
+}
+
+alloc39 (size: 52, align: 1) {
+    0x00 │ 70 61 6e 69 63 73 5f 62 65 66 6f 72 65 5f 63 6f │ panics_before_co
+    0x10 │ 6d 6d 69 74 3a 20 74 68 65 20 6e 6f 6e 2d 70 61 │ mmit: the non-pa
+    0x20 │ 6e 69 63 6b 69 6e 67 20 70 61 74 68 20 63 6f 6d │ nicking path com
+    0x30 │ 6d 69 74 73                                     │ mits
+}
+
+alloc38 (size: 41, align: 1) {
+    0x00 │ 6d 75 6c 74 69 70 6c 65 5f 72 65 74 75 72 6e 73 │ multiple_returns
+    0x10 │ 3a 20 74 68 65 20 6c 61 74 65 20 72 65 74 75 72 │ : the late retur
+    0x20 │ 6e 20 63 6f 6d 6d 69 74 73                      │ n commits
+}
+
+alloc37 (size: 35, align: 1) {
+    0x00 │ 6d 75 6c 74 69 70 6c 65 5f 72 65 74 75 72 6e 73 │ multiple_returns
+    0x10 │ 3a 20 6c 61 74 65 20 72 65 74 75 72 6e 20 76 61 │ : late return va
+    0x20 │ 6c 75 65                                        │ lue
+}
+
+alloc36 (size: 62, align: 1) {
+    0x00 │ 6d 75 6c 74 69 70 6c 65 5f 72 65 74 75 72 6e 73 │ multiple_returns
+    0x10 │ 3a 20 74 68 65 20 65 61 72 6c 79 20 72 65 74 75 │ : the early retu
+    0x20 │ 72 6e 20 63 6f 6d 6d 69 74 73 20 74 68 65 20 75 │ rn commits the u
+    0x30 │ 6e 63 68 61 6e 67 65 64 20 66 69 65 6c 64       │ nchanged field
+}
+
+alloc35 (size: 36, align: 1) {
+    0x00 │ 6d 75 6c 74 69 70 6c 65 5f 72 65 74 75 72 6e 73 │ multiple_returns
+    0x10 │ 3a 20 65 61 72 6c 79 20 72 65 74 75 72 6e 20 76 │ : early return v
+    0x20 │ 61 6c 75 65                                     │ alue
+}
+
+alloc34 (size: 43, align: 1) {
+    0x00 │ 77 69 74 68 5f 72 65 74 75 72 6e 5f 76 61 6c 75 │ with_return_valu
+    0x10 │ 65 3a 20 74 68 65 20 63 6f 6d 6d 69 74 20 73 74 │ e: the commit st
+    0x20 │ 69 6c 6c 20 68 61 70 70 65 6e 73                │ ill happens
+}
+
+alloc33 (size: 43, align: 1) {
+    0x00 │ 77 69 74 68 5f 72 65 74 75 72 6e 5f 76 61 6c 75 │ with_return_valu
+    0x10 │ 65 3a 20 60 5f 30 60 20 73 75 72 76 69 76 65 73 │ e: `_0` survives
+    0x20 │ 20 74 68 65 20 63 6f 6d 6d 69 74                │  the commit
+}
+
+alloc32 (size: 46, align: 1) {
+    0x00 │ 69 6e 64 65 78 65 64 5f 77 72 69 74 65 3a 20 61 │ indexed_write: a
+    0x10 │ 6e 20 75 6e 72 65 6c 61 74 65 64 20 66 69 65 6c │ n unrelated fiel
+    0x20 │ 64 20 69 73 20 75 6e 74 6f 75 63 68 65 64       │ d is untouched
+}
+
+alloc31 (size: 48, align: 1) {
+    0x00 │ 69 6e 64 65 78 65 64 5f 77 72 69 74 65 3a 20 74 │ indexed_write: t
+    0x10 │ 68 65 20 77 69 64 65 6e 65 64 20 61 72 72 61 79 │ he widened array
+    0x20 │ 20 63 6f 6d 6d 69 74 20 69 73 20 65 78 61 63 74 │  commit is exact
+}
+
+alloc30 (size: 43, align: 1) {
+    0x00 │ 77 68 6f 6c 65 5f 73 74 61 74 65 3a 20 74 68 65 │ whole_state: the
+    0x10 │ 20 77 68 6f 6c 65 20 70 6f 69 6e 74 65 65 20 69 │  whole pointee i
+    0x20 │ 73 20 63 6f 6d 6d 69 74 74 65 64                │ s committed
+}
+
+alloc29 (size: 50, align: 1) {
+    0x00 │ 73 69 62 6c 69 6e 67 5f 66 69 65 6c 64 73 3a 20 │ sibling_fields: 
+    0x10 │ 74 68 65 20 73 69 62 6c 69 6e 67 20 65 6e 74 72 │ the sibling entr
+    0x20 │ 79 20 69 73 20 63 6f 6d 6d 69 74 74 65 64 20 74 │ y is committed t
+    0x30 │ 6f 6f                                           │ oo
+}
+
+alloc28 (size: 37, align: 1) {
+    0x00 │ 73 69 62 6c 69 6e 67 5f 66 69 65 6c 64 73 3a 20 │ sibling_fields: 
+    0x10 │ 6f 6e 6c 79 20 60 79 60 20 69 73 20 63 6f 6d 6d │ only `y` is comm
+    0x20 │ 69 74 74 65 64                                  │ itted
+}
+
+alloc27 (size: 51, align: 1) {
+    0x00 │ 6f 76 65 72 6c 61 70 70 69 6e 67 5f 77 72 69 74 │ overlapping_writ
+    0x10 │ 65 73 3a 20 61 6e 20 75 6e 72 65 6c 61 74 65 64 │ es: an unrelated
+    0x20 │ 20 66 69 65 6c 64 20 69 73 20 75 6e 74 6f 75 63 │  field is untouc
+    0x30 │ 68 65 64                                        │ hed
+}
+
+alloc26 (size: 38, align: 1) {
+    0x00 │ 6f 76 65 72 6c 61 70 70 69 6e 67 5f 77 72 69 74 │ overlapping_writ
+    0x10 │ 65 73 3a 20 70 61 72 65 6e 74 20 63 6f 6d 6d 69 │ es: parent commi
+    0x20 │ 74 20 77 69 6e 73                               │ t wins
+}
+
+alloc25 (size: 43, align: 1) {
+    0x00 │ 63 6f 6e 64 69 74 69 6f 6e 61 6c 5f 77 72 69 74 │ conditional_writ
+    0x10 │ 65 3a 20 74 68 65 20 74 61 6b 65 6e 20 62 72 61 │ e: the taken bra
+    0x20 │ 6e 63 68 20 63 6f 6d 6d 69 74 73                │ nch commits
+}
+
+alloc24 (size: 53, align: 1) {
+    0x00 │ 63 6f 6e 64 69 74 69 6f 6e 61 6c 5f 77 72 69 74 │ conditional_writ
+    0x10 │ 65 3a 20 74 68 65 20 75 6e 74 61 6b 65 6e 20 62 │ e: the untaken b
+    0x20 │ 72 61 6e 63 68 20 63 68 61 6e 67 65 73 20 6e 6f │ ranch changes no
+    0x30 │ 74 68 69 6e 67                                  │ thing
+}
+
+alloc23 (size: 46, align: 1) {
+    0x00 │ 62 61 73 69 63 5f 66 69 65 6c 64 3a 20 61 6e 20 │ basic_field: an 
+    0x10 │ 75 6e 63 6f 6d 6d 69 74 74 65 64 20 61 72 72 61 │ uncommitted arra
+    0x20 │ 79 20 69 73 20 75 6e 74 6f 75 63 68 65 64       │ y is untouched
+}
+
+alloc22 (size: 46, align: 1) {
+    0x00 │ 62 61 73 69 63 5f 66 69 65 6c 64 3a 20 61 6e 20 │ basic_field: an 
+    0x10 │ 75 6e 63 6f 6d 6d 69 74 74 65 64 20 66 69 65 6c │ uncommitted fiel
+    0x20 │ 64 20 69 73 20 75 6e 74 6f 75 63 68 65 64       │ d is untouched
+}
+
+alloc21 (size: 54, align: 1) {
+    0x00 │ 62 61 73 69 63 5f 66 69 65 6c 64 3a 20 61 6e 20 │ basic_field: an 
+    0x10 │ 75 6e 63 6f 6d 6d 69 74 74 65 64 20 73 69 62 6c │ uncommitted sibl
+    0x20 │ 69 6e 67 20 66 69 65 6c 64 20 69 73 20 75 6e 74 │ ing field is unt
+    0x30 │ 6f 75 63 68 65 64                               │ ouched
+}
+
+alloc20 (size: 51, align: 1) {
+    0x00 │ 62 61 73 69 63 5f 66 69 65 6c 64 3a 20 74 68 65 │ basic_field: the
+    0x10 │ 20 63 6f 6d 6d 69 74 74 65 64 20 66 69 65 6c 64 │  committed field
+    0x20 │ 20 72 65 61 63 68 65 73 20 74 68 65 20 63 61 6c │  reaches the cal
+    0x30 │ 6c 65 72                                        │ ler
+}
+
+const run_checks::promoted[0]: &[u32; 8] = {
+    let mut _0: &[u32; 8];
+    let mut _1: [u32; 8];
+
+    bb0: {
+        _1 = [const 1_u32, const 2_u32, const 3_u32, const 4_u32, const 5_u32, const 0_u32, const 7_u32, const 8_u32];
+        _0 = &_1;
+        return;
+    }
+}
+
+const run_checks::promoted[1]: &(u8, u32) = {
+    let mut _0: &(u8, u32);
+    let mut _1: (u8, u32);
+
+    bb0: {
+        _1 = (const 1_u8, const 3_u32);
+        _0 = &_1;
+        return;
+    }
+}
+
+const run_checks::promoted[2]: &[u32; 4] = {
+    let mut _0: &[u32; 4];
+    let mut _1: [u32; 4];
+
+    bb0: {
+        _1 = [const 0_u32, const 1_u32, const 9_u32, const 3_u32];
+        _0 = &_1;
+        return;
+    }
+}
+
+const run_checks::promoted[3]: &Position = {
+    let mut _0: &Position;
+    let mut _1: Position;
+
+    bb0: {
+        _1 = Position { x: const 10_u32, y: const 5_u32 };
+        _0 = &_1;
+        return;
+    }
+}
+
+const run_checks::promoted[4]: &Position = {
+    let mut _0: &Position;
+    let mut _1: Position;
+
+    bb0: {
+        _1 = Position { x: const 7_u32, y: const 2_u32 };
+        _0 = &_1;
+        return;
+    }
+}
+
+const run_checks::promoted[5]: &[u32; 4] = {
+    let mut _0: &[u32; 4];
+    let mut _1: [u32; 4];
+
+    bb0: {
+        _1 = [const 0_u32, const 1_u32, const 2_u32, const 3_u32];
+        _0 = &_1;
+        return;
+    }
+}
+
+fn panic(_1: &PanicInfo<'_>) -> ! {
+    let mut _0: !;
+
+    bb0: {
+        goto -> bb1;
+    }
+
+    bb1: {
+        goto -> bb1;
+    }
+}
+
+fn rust_eh_personality() -> () {
+    let mut _0: ();
+
+    bb0: {
+        return;
+    }
+}
+
+fn report(_1: &str) -> () {
+    debug msg => _1;
+    let mut _0: ();
+    let _2: isize;
+    let mut _3: *const u8;
+    let mut _4: usize;
+    let _5: isize;
+    let mut _6: *const u8;
+    let mut _7: &str;
+
+    bb0: {
+        _3 = str::<impl str>::as_ptr(copy _1) -> [return: bb1, unwind continue];
+    }
+
+    bb1: {
+        _4 = str::<impl str>::len(copy _1) -> [return: bb2, unwind continue];
+    }
+
+    bb2: {
+        _2 = write(const 2_i32, move _3, move _4) -> [return: bb3, unwind unreachable];
+    }
+
+    bb3: {
+        _7 = const "\n";
+        _6 = str::<impl str>::as_ptr(move _7) -> [return: bb4, unwind continue];
+    }
+
+    bb4: {
+        _5 = write(const 2_i32, move _6, const 1_usize) -> [return: bb5, unwind unreachable];
+    }
+
+    bb5: {
+        return;
+    }
+}
+
+alloc79 (size: 1, align: 1) {
+    0a                                              │ .
+}
+
+fn main(_1: i32, _2: *const *const u8) -> i32 {
+    debug _argc => _1;
+    debug _argv => _2;
+    let mut _0: i32;
+    let mut _3: core::result::Result<(), &str>;
+    let mut _4: isize;
+    let _5: ();
+    let mut _6: &str;
+    let _7: &str;
+    let _8: ();
+    let mut _9: &str;
+    let _10: ();
+    scope 1 {
+        debug name => _7;
+    }
+
+    bb0: {
+        _3 = run_checks() -> [return: bb1, unwind terminate(abi)];
+    }
+
+    bb1: {
+        _4 = discriminant(_3);
+        switchInt(move _4) -> [0: bb4, 1: bb3, otherwise: bb2];
+    }
+
+    bb2: {
+        unreachable;
+    }
+
+    bb3: {
+        _7 = copy ((_3 as Err).0: &str);
+        _9 = const "function_shadow: FAILED:";
+        _8 = report(move _9) -> [return: bb6, unwind terminate(abi)];
+    }
+
+    bb4: {
+        _6 = const "function_shadow: all runtime checks passed";
+        _5 = report(move _6) -> [return: bb5, unwind terminate(abi)];
+    }
+
+    bb5: {
+        _0 = const 0_i32;
+        goto -> bb8;
+    }
+
+    bb6: {
+        _10 = report(copy _7) -> [return: bb7, unwind terminate(abi)];
+    }
+
+    bb7: {
+        _0 = const 1_i32;
+        goto -> bb8;
+    }
+
+    bb8: {
+        return;
+    }
+}
+
+alloc81 (size: 24, align: 1) {
+    0x00 │ 66 75 6e 63 74 69 6f 6e 5f 73 68 61 64 6f 77 3a │ function_shadow:
+    0x10 │ 20 46 41 49 4c 45 44 3a                         │  FAILED:
+}
+
+alloc80 (size: 42, align: 1) {
+    0x00 │ 66 75 6e 63 74 69 6f 6e 5f 73 68 61 64 6f 77 3a │ function_shadow:
+    0x10 │ 20 61 6c 6c 20 72 75 6e 74 69 6d 65 20 63 68 65 │  all runtime che
+    0x20 │ 63 6b 73 20 70 61 73 73 65 64                   │ cks passed
+}

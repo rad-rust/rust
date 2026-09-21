@@ -10,12 +10,14 @@ use rustc_middle::mir::visit::{
     MutatingUseContext, NonMutatingUseContext, NonUseContext, PlaceContext, Visitor,
 };
 use rustc_middle::mir::{
-    BasicBlock, BasicBlockData, BasicBlocks, Body, Local, Location, Place, PlaceRef,
-    ProjectionElem, Rvalue, Statement, StatementKind, TerminatorKind,
+    BasicBlock, BasicBlockData, BasicBlocks, Body, Local, Location, Place, Rvalue, Statement,
+    StatementKind, TerminatorKind,
 };
 use rustc_middle::ty::{TyCtxt, TypingEnv};
 use rustc_span::def_id::DefId;
 use rustc_span::{sym, Symbol};
+
+use super::rad_protected_places::{DerefPolicy, IsPrefixOf, canonicalize};
 
 pub(super) struct CheckpointAnalysis<'tcx> {
     pub checkpoints: Vec<(BasicBlock, LivePlaces<'tcx>)>,
@@ -229,7 +231,9 @@ impl<'a, 'tcx> GenKillCollector<'a, 'tcx> {
         }
 
         // When even the bare Local is still an unsized type
-        let Some(canonical) = canonicalize(self.tcx, self.body, self.typing_env, place) else {
+        let Some(canonical) =
+            canonicalize(self.tcx, self.body, self.typing_env, place, DerefPolicy::FollowRefs)
+        else {
             return;
         };
 
@@ -296,59 +300,4 @@ impl<'tcx> GenKill<'tcx> {
             kill_all: false,
         }
     }
-}
-
-// Determines if a Place contains another Place
-trait IsPrefixOf<'tcx> {
-    fn is_prefix_of(&self, other: PlaceRef<'tcx>) -> bool;
-}
-
-impl<'tcx> IsPrefixOf<'tcx> for PlaceRef<'tcx> {
-    fn is_prefix_of(&self, other: PlaceRef<'tcx>) -> bool {
-        self.local == other.local
-            && self.projection.len() <= other.projection.len()
-            && self.projection == &other.projection[..self.projection.len()]
-    }
-}
-
-// Determines what is the most precise Place we can safely checkpoint (we need to 
-// ensure it denotes a statically identifiable, sized region suitable for checkpointing)
-fn canonicalize<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    body: &Body<'tcx>,
-    typing_env: TypingEnv<'tcx>,
-    place: Place<'tcx>,
-) -> Option<Place<'tcx>> {
-    let mut len = 0;
-
-    for (base, elem) in place.iter_projections() {
-        let follow = match elem {
-            ProjectionElem::Field(..)
-            | ProjectionElem::OpaqueCast(_)
-            | ProjectionElem::UnwrapUnsafeBinder(_)
-            | ProjectionElem::ConstantIndex { from_end: false, .. } => true,
-
-            ProjectionElem::Deref => base.ty(body, tcx).ty.is_ref(),
-
-            ProjectionElem::Index(_)
-            | ProjectionElem::ConstantIndex { from_end: true, .. }
-            | ProjectionElem::Subslice { .. }
-            | ProjectionElem::Downcast(..) => false,
-        };
-
-        if !follow {
-            break;
-        }
-
-        len += 1;
-    }
-
-    let mut prefix = PlaceRef { local: place.local, projection: &place.projection[..len] };
-
-    // The injected checkpoint records `layout_of(place_ty).size`, so back off to a sized prefix.
-    while !prefix.ty(body, tcx).ty.is_sized(tcx, typing_env) {
-        prefix = prefix.last_projection()?.0;
-    }
-
-    Some(Place { local: prefix.local, projection: tcx.mk_place_elems(prefix.projection) })
 }
