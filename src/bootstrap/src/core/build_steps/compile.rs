@@ -645,6 +645,11 @@ pub fn std_cargo(
         if crates.is_empty() {
             cargo.args(["-p", "alloc"]);
         }
+
+        if target.contains("tock") {
+            cargo.args(["-p", "rad_protected"]);
+        }
+
         cargo
             .arg("--manifest-path")
             .arg(builder.src.join("library/alloc/Cargo.toml"))

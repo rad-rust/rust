@@ -1651,6 +1651,7 @@ supported_targets! {
     ("thumbv8m.base-none-eabi", thumbv8m_base_none_eabi),
     ("thumbv8m.main-none-eabi", thumbv8m_main_none_eabi),
     ("thumbv8m.main-none-eabihf", thumbv8m_main_none_eabihf),
+    ("thumbv8m.main-tock-eabi", thumbv8m_main_tock_eabi),
 
     ("armv7a-none-eabi", armv7a_none_eabi),
     ("thumbv7a-none-eabi", thumbv7a_none_eabi),
@@ -1996,6 +1997,7 @@ crate::target_spec_enum! {
         Solaris = "solaris",
         SolidAsp3 = "solid_asp3",
         TeeOs = "teeos",
+        Tock = "tock",
         Trusty = "trusty",
         TvOs = "tvos",
         Uefi = "uefi",

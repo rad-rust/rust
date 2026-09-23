@@ -20,5 +20,9 @@ libc = { version = "0.2.178", default-features = false, features = [
     'rustc-dep-of-std',
 ], public = true }
 
+[target.'cfg(target_os = "tock")'.dependencies]
+libtock_platform = { path = "../vendor/libtock-rs/platform" }
+libtock_runtime  = { path = "../vendor/libtock-rs/runtime" }
+
 [lints.rust.unexpected_cfgs]
 level = "warn"

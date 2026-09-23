@@ -89,6 +89,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-hal"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "361a90feb7004eca4019fb28352a9465666b24f840f5c3cddf0ff13920590b89"
+
+[[package]]
 name = "foldhash"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -151,6 +157,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37c93d8daa9d8a012fd8ab92f088405fb202ea0b6ab73ee2482ae66af4f42091"
 dependencies = [
  "rustc-std-workspace-core",
+]
+
+[[package]]
+name = "libtock_platform"
+version = "0.1.0"
+dependencies = [
+ "compiler_builtins",
+ "core",
+ "embedded-hal",
+]
+
+[[package]]
+name = "libtock_runtime"
+version = "0.1.0"
+dependencies = [
+ "compiler_builtins",
+ "core",
+ "libtock_platform",
 ]
 
 [[package]]
@@ -256,6 +280,8 @@ dependencies = [
  "compiler_builtins",
  "core",
  "libc",
+ "libtock_platform",
+ "libtock_runtime",
 ]
 
 [[package]]
