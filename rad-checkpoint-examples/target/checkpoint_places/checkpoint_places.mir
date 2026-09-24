@@ -1,0 +1,1830 @@
+// WARNING: This output format is intended for human consumers only
+// and is subject to change without notice. Knock yourself out.
+// HINT: See also -Z dump-mir for MIR at specific points during compilation.
+fn checkpoint(_1: &[(*mut u8, usize)]) -> () {
+    debug _entries => _1;
+    let mut _0: ();
+
+    bb0: {
+        return;
+    }
+}
+
+const Inner::unrelated::{constant#0}: usize = const 128_usize;
+
+fn <impl at checkpoint_places.rs:54:10: 54:15>::clone(_1: &Coordinates) -> Coordinates {
+    debug self => _1;
+    let mut _0: Coordinates;
+    scope 1 {
+    }
+
+    bb0: {
+        _0 = copy (*_1);
+        return;
+    }
+}
+
+fn <impl at checkpoint_places.rs:60:10: 60:15>::clone(_1: &Position) -> Position {
+    debug self => _1;
+    let mut _0: Position;
+    scope 1 {
+        scope 2 {
+        }
+    }
+
+    bb0: {
+        _0 = copy (*_1);
+        return;
+    }
+}
+
+fn <impl at checkpoint_places.rs:66:10: 66:15>::clone(_1: &State) -> State {
+    debug self => _1;
+    let mut _0: State;
+    scope 1 {
+        scope 2 {
+        }
+    }
+
+    bb0: {
+        _0 = copy (*_1);
+        return;
+    }
+}
+
+const Accum::scratch::{constant#0}: usize = const 96_usize;
+
+fn barrier() -> () {
+    let mut _0: ();
+
+    bb0: {
+        return;
+    }
+}
+
+fn add_one(_1: u32) -> u32 {
+    debug x => _1;
+    let mut _0: u32;
+    let mut _2: (u32, bool);
+
+    bb0: {
+        _2 = AddWithOverflow(copy _1, const 1_u32);
+        assert(!move (_2.1: bool), "attempt to compute `{} + {}`, which would overflow", copy _1, const 1_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        _0 = move (_2.0: u32);
+        return;
+    }
+}
+
+fn consume_tuple(_1: (u32, u64, [u8; 64])) -> u64 {
+    debug t => _1;
+    let mut _0: u64;
+
+    bb0: {
+        _0 = copy (_1.1: u64);
+        return;
+    }
+}
+
+const consume_tuple::{constant#0}: usize = const 64_usize;
+
+fn update_position(_1: &mut Position) -> () {
+    debug p => _1;
+    let mut _0: ();
+
+    bb0: {
+        (((*_1).0: Coordinates).0: f32) = Add(copy (((*_1).0: Coordinates).0: f32), const 1f32);
+        ((*_1).1: bool) = const true;
+        return;
+    }
+}
+
+fn scalar_local(_1: u32) -> u32 {
+    debug seed => _1;
+    let mut _0: u32;
+    let _2: u32;
+    let mut _3: (u32, bool);
+    let _4: ();
+    let mut _5: u32;
+    let mut _6: (u32, bool);
+    let mut _7: [(*mut u8, usize); 1];
+    let mut _8: *mut u32;
+    let mut _9: *mut u8;
+    let mut _10: (*mut u8, usize);
+    let mut _11: &[(*mut u8, usize); 1];
+    let mut _12: &[(*mut u8, usize)];
+    let mut _13: ();
+    scope 1 {
+        debug acc => _2;
+    }
+
+    bb0: {
+        _3 = AddWithOverflow(copy _1, const 3_u32);
+        assert(!move (_3.1: bool), "attempt to compute `{} + {}`, which would overflow", copy _1, const 3_u32) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        _8 = &raw mut _2;
+        _9 = move _8 as *mut u8 (PtrToPtr);
+        _10 = (move _9, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _7[0 of 1] = move _10;
+        _11 = &_7;
+        _12 = move _11 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _13 = checkpoint(move _12) -> [return: bb4, unwind continue];
+    }
+
+    bb2: {
+        _5 = copy _2;
+        _6 = AddWithOverflow(copy _5, const 1_u32);
+        assert(!move (_6.1: bool), "attempt to compute `{} + {}`, which would overflow", move _5, const 1_u32) -> [success: bb3, unwind continue];
+    }
+
+    bb3: {
+        _0 = move (_6.0: u32);
+        return;
+    }
+
+    bb4: {
+        _2 = move (_3.0: u32);
+        _4 = barrier() -> [return: bb2, unwind continue];
+    }
+}
+
+fn sibling_fields(_1: Coordinates) -> f32 {
+    debug c => _1;
+    let mut _0: f32;
+    let _2: ();
+    let mut _3: f32;
+    let mut _4: f32;
+    let mut _5: [(*mut u8, usize); 2];
+    let mut _6: *mut f32;
+    let mut _7: *mut u8;
+    let mut _8: (*mut u8, usize);
+    let mut _9: *mut f32;
+    let mut _10: *mut u8;
+    let mut _11: (*mut u8, usize);
+    let mut _12: &[(*mut u8, usize); 2];
+    let mut _13: &[(*mut u8, usize)];
+    let mut _14: ();
+
+    bb0: {
+        _6 = &raw mut (_1.0: f32);
+        _7 = move _6 as *mut u8 (PtrToPtr);
+        _8 = (move _7, const <f32 as core::mem::SizedTypeProperties>::SIZE);
+        _5[0 of 2] = move _8;
+        _9 = &raw mut (_1.1: f32);
+        _10 = move _9 as *mut u8 (PtrToPtr);
+        _11 = (move _10, const <f32 as core::mem::SizedTypeProperties>::SIZE);
+        _5[1 of 2] = move _11;
+        _12 = &_5;
+        _13 = move _12 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _14 = checkpoint(move _13) -> [return: bb2, unwind continue];
+    }
+
+    bb1: {
+        _3 = copy (_1.0: f32);
+        _4 = copy (_1.1: f32);
+        _0 = Add(move _3, move _4);
+        return;
+    }
+
+    bb2: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn deep_field(_1: State) -> f32 {
+    debug s => _1;
+    let mut _0: f32;
+    let _2: ();
+    let mut _3: [(*mut u8, usize); 1];
+    let mut _4: *mut f32;
+    let mut _5: *mut u8;
+    let mut _6: (*mut u8, usize);
+    let mut _7: &[(*mut u8, usize); 1];
+    let mut _8: &[(*mut u8, usize)];
+    let mut _9: ();
+
+    bb0: {
+        _4 = &raw mut (((_1.1: Position).0: Coordinates).0: f32);
+        _5 = move _4 as *mut u8 (PtrToPtr);
+        _6 = (move _5, const <f32 as core::mem::SizedTypeProperties>::SIZE);
+        _3[0 of 1] = move _6;
+        _7 = &_3;
+        _8 = move _7 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _9 = checkpoint(move _8) -> [return: bb2, unwind continue];
+    }
+
+    bb1: {
+        _0 = copy (((_1.1: Position).0: Coordinates).0: f32);
+        return;
+    }
+
+    bb2: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn projected_size(_1: Outer) -> u64 {
+    debug o => _1;
+    let mut _0: u64;
+    let _2: ();
+    let mut _3: [(*mut u8, usize); 1];
+    let mut _4: *mut u64;
+    let mut _5: *mut u8;
+    let mut _6: (*mut u8, usize);
+    let mut _7: &[(*mut u8, usize); 1];
+    let mut _8: &[(*mut u8, usize)];
+    let mut _9: ();
+
+    bb0: {
+        _4 = &raw mut ((_1.0: Inner).0: u64);
+        _5 = move _4 as *mut u8 (PtrToPtr);
+        _6 = (move _5, const <u64 as core::mem::SizedTypeProperties>::SIZE);
+        _3[0 of 1] = move _6;
+        _7 = &_3;
+        _8 = move _7 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _9 = checkpoint(move _8) -> [return: bb2, unwind continue];
+    }
+
+    bb1: {
+        _0 = copy ((_1.0: Inner).0: u64);
+        return;
+    }
+
+    bb2: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn parent_write_kills_child(_1: State, _2: u32) -> u32 {
+    debug s => _1;
+    debug keep => _2;
+    let mut _0: u32;
+    let _3: ();
+    let mut _4: Position;
+    let mut _5: Coordinates;
+    let mut _6: u32;
+    let mut _7: f32;
+    let mut _8: u32;
+    let mut _9: (u32, bool);
+    let mut _10: [(*mut u8, usize); 1];
+    let mut _11: *mut u32;
+    let mut _12: *mut u8;
+    let mut _13: (*mut u8, usize);
+    let mut _14: &[(*mut u8, usize); 1];
+    let mut _15: &[(*mut u8, usize)];
+    let mut _16: ();
+
+    bb0: {
+        _11 = &raw mut _2;
+        _12 = move _11 as *mut u8 (PtrToPtr);
+        _13 = (move _12, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _10[0 of 1] = move _13;
+        _14 = &_10;
+        _15 = move _14 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _16 = checkpoint(move _15) -> [return: bb3, unwind continue];
+    }
+
+    bb1: {
+        _5 = Coordinates { x: const 1f32, y: const 2f32 };
+        _4 = Position { coordinates: move _5, valid: const true };
+        (_1.1: Position) = move _4;
+        _7 = copy (((_1.1: Position).0: Coordinates).0: f32);
+        _6 = move _7 as u32 (FloatToInt);
+        _8 = copy _2;
+        _9 = AddWithOverflow(copy _6, copy _8);
+        assert(!move (_9.1: bool), "attempt to compute `{} + {}`, which would overflow", move _6, move _8) -> [success: bb2, unwind continue];
+    }
+
+    bb2: {
+        _0 = move (_9.0: u32);
+        return;
+    }
+
+    bb3: {
+        _3 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn child_write_keeps_sibling(_1: Coordinates) -> f32 {
+    debug c => _1;
+    let mut _0: f32;
+    let _2: ();
+    let mut _3: f32;
+    let mut _4: f32;
+    let mut _5: [(*mut u8, usize); 1];
+    let mut _6: *mut f32;
+    let mut _7: *mut u8;
+    let mut _8: (*mut u8, usize);
+    let mut _9: &[(*mut u8, usize); 1];
+    let mut _10: &[(*mut u8, usize)];
+    let mut _11: ();
+
+    bb0: {
+        _6 = &raw mut (_1.1: f32);
+        _7 = move _6 as *mut u8 (PtrToPtr);
+        _8 = (move _7, const <f32 as core::mem::SizedTypeProperties>::SIZE);
+        _5[0 of 1] = move _8;
+        _9 = &_5;
+        _10 = move _9 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _11 = checkpoint(move _10) -> [return: bb2, unwind continue];
+    }
+
+    bb1: {
+        (_1.0: f32) = const 10f32;
+        _3 = copy (_1.0: f32);
+        _4 = copy (_1.1: f32);
+        _0 = Add(move _3, move _4);
+        return;
+    }
+
+    bb2: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn parent_covers_child(_1: (u32, u64, [u8; 64])) -> u64 {
+    debug t => _1;
+    let mut _0: u64;
+    let _2: ();
+    let _3: u32;
+    let mut _4: u64;
+    let mut _5: (u32, u64, [u8; 64]);
+    let mut _6: u64;
+    let mut _7: u32;
+    let mut _8: (u64, bool);
+    let mut _9: [(*mut u8, usize); 1];
+    let mut _10: *mut (u32, u64, [u8; 64]);
+    let mut _11: *mut u8;
+    let mut _12: (*mut u8, usize);
+    let mut _13: &[(*mut u8, usize); 1];
+    let mut _14: &[(*mut u8, usize)];
+    let mut _15: ();
+    let mut _16: [(*mut u8, usize); 2];
+    let mut _17: *mut u32;
+    let mut _18: *mut u8;
+    let mut _19: (*mut u8, usize);
+    let mut _20: *mut u64;
+    let mut _21: *mut u8;
+    let mut _22: (*mut u8, usize);
+    let mut _23: &[(*mut u8, usize); 2];
+    let mut _24: &[(*mut u8, usize)];
+    let mut _25: ();
+    scope 1 {
+        debug first => _3;
+    }
+
+    bb0: {
+        _10 = &raw mut _1;
+        _11 = move _10 as *mut u8 (PtrToPtr);
+        _12 = (move _11, const <(u32, u64, [u8; 64]) as core::mem::SizedTypeProperties>::SIZE);
+        _9[0 of 1] = move _12;
+        _13 = &_9;
+        _14 = move _13 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _15 = checkpoint(move _14) -> [return: bb4, unwind continue];
+    }
+
+    bb1: {
+        _17 = &raw mut _3;
+        _18 = move _17 as *mut u8 (PtrToPtr);
+        _19 = (move _18, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _16[0 of 2] = move _19;
+        _20 = &raw mut _4;
+        _21 = move _20 as *mut u8 (PtrToPtr);
+        _22 = (move _21, const <u64 as core::mem::SizedTypeProperties>::SIZE);
+        _16[1 of 2] = move _22;
+        _23 = &_16;
+        _24 = move _23 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _25 = checkpoint(move _24) -> [return: bb5, unwind continue];
+    }
+
+    bb2: {
+        _7 = copy _3;
+        _6 = move _7 as u64 (IntToInt);
+        _8 = AddWithOverflow(copy _4, copy _6);
+        assert(!move (_8.1: bool), "attempt to compute `{} + {}`, which would overflow", move _4, move _6) -> [success: bb3, unwind continue];
+    }
+
+    bb3: {
+        _0 = move (_8.0: u64);
+        return;
+    }
+
+    bb4: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+
+    bb5: {
+        _3 = copy (_1.0: u32);
+        _5 = copy _1;
+        _4 = consume_tuple(move _5) -> [return: bb2, unwind continue];
+    }
+}
+
+const parent_covers_child::{constant#0}: usize = const 64_usize;
+
+fn tuple_fields(_1: (u32, u64, [u8; 64])) -> u64 {
+    debug t => _1;
+    let mut _0: u64;
+    let _2: ();
+    let mut _3: u64;
+    let mut _4: u64;
+    let mut _5: u32;
+    let mut _6: (u64, bool);
+    let mut _7: [(*mut u8, usize); 2];
+    let mut _8: *mut u32;
+    let mut _9: *mut u8;
+    let mut _10: (*mut u8, usize);
+    let mut _11: *mut u64;
+    let mut _12: *mut u8;
+    let mut _13: (*mut u8, usize);
+    let mut _14: &[(*mut u8, usize); 2];
+    let mut _15: &[(*mut u8, usize)];
+    let mut _16: ();
+
+    bb0: {
+        _8 = &raw mut (_1.0: u32);
+        _9 = move _8 as *mut u8 (PtrToPtr);
+        _10 = (move _9, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _7[0 of 2] = move _10;
+        _11 = &raw mut (_1.1: u64);
+        _12 = move _11 as *mut u8 (PtrToPtr);
+        _13 = (move _12, const <u64 as core::mem::SizedTypeProperties>::SIZE);
+        _7[1 of 2] = move _13;
+        _14 = &_7;
+        _15 = move _14 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _16 = checkpoint(move _15) -> [return: bb3, unwind continue];
+    }
+
+    bb1: {
+        _3 = copy (_1.1: u64);
+        _5 = copy (_1.0: u32);
+        _4 = move _5 as u64 (IntToInt);
+        _6 = AddWithOverflow(copy _3, copy _4);
+        assert(!move (_6.1: bool), "attempt to compute `{} + {}`, which would overflow", move _3, move _4) -> [success: bb2, unwind continue];
+    }
+
+    bb2: {
+        _0 = move (_6.0: u64);
+        return;
+    }
+
+    bb3: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+const tuple_fields::{constant#0}: usize = const 64_usize;
+
+fn loop_convergence(_1: Accum, _2: u32) -> u64 {
+    debug acc => _1;
+    debug n => _2;
+    let mut _0: u64;
+    let mut _3: u32;
+    let mut _4: bool;
+    let mut _5: u32;
+    let mut _6: u32;
+    let _7: ();
+    let mut _8: u64;
+    let mut _9: u32;
+    let mut _10: (u64, bool);
+    let mut _11: (u32, bool);
+    let mut _12: [(*mut u8, usize); 3];
+    let mut _13: *mut u64;
+    let mut _14: *mut u8;
+    let mut _15: (*mut u8, usize);
+    let mut _16: *mut u32;
+    let mut _17: *mut u8;
+    let mut _18: (*mut u8, usize);
+    let mut _19: *mut u32;
+    let mut _20: *mut u8;
+    let mut _21: (*mut u8, usize);
+    let mut _22: &[(*mut u8, usize); 3];
+    let mut _23: &[(*mut u8, usize)];
+    let mut _24: ();
+    scope 1 {
+        debug i => _3;
+    }
+
+    bb0: {
+        _3 = const 0_u32;
+        goto -> bb1;
+    }
+
+    bb1: {
+        _5 = copy _3;
+        _6 = copy _2;
+        _4 = Lt(move _5, move _6);
+        switchInt(move _4) -> [0: bb6, otherwise: bb2];
+    }
+
+    bb2: {
+        _13 = &raw mut (_1.0: u64);
+        _14 = move _13 as *mut u8 (PtrToPtr);
+        _15 = (move _14, const <u64 as core::mem::SizedTypeProperties>::SIZE);
+        _12[0 of 3] = move _15;
+        _16 = &raw mut _2;
+        _17 = move _16 as *mut u8 (PtrToPtr);
+        _18 = (move _17, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _12[1 of 3] = move _18;
+        _19 = &raw mut _3;
+        _20 = move _19 as *mut u8 (PtrToPtr);
+        _21 = (move _20, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _12[2 of 3] = move _21;
+        _22 = &_12;
+        _23 = move _22 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _24 = checkpoint(move _23) -> [return: bb7, unwind continue];
+    }
+
+    bb3: {
+        _9 = copy _3;
+        _8 = move _9 as u64 (IntToInt);
+        _10 = AddWithOverflow(copy (_1.0: u64), copy _8);
+        assert(!move (_10.1: bool), "attempt to compute `{} + {}`, which would overflow", copy (_1.0: u64), move _8) -> [success: bb4, unwind continue];
+    }
+
+    bb4: {
+        (_1.0: u64) = move (_10.0: u64);
+        _11 = AddWithOverflow(copy _3, const 1_u32);
+        assert(!move (_11.1: bool), "attempt to compute `{} + {}`, which would overflow", copy _3, const 1_u32) -> [success: bb5, unwind continue];
+    }
+
+    bb5: {
+        _3 = move (_11.0: u32);
+        goto -> bb1;
+    }
+
+    bb6: {
+        _0 = copy (_1.0: u64);
+        return;
+    }
+
+    bb7: {
+        _7 = barrier() -> [return: bb3, unwind continue];
+    }
+}
+
+fn dynamic_index_read(_1: [u32; 8], _2: usize) -> u32 {
+    debug buf => _1;
+    debug i => _2;
+    let mut _0: u32;
+    let _3: ();
+    let _4: usize;
+    let mut _5: bool;
+    let mut _6: [(*mut u8, usize); 2];
+    let mut _7: *mut [u32; 8];
+    let mut _8: *mut u8;
+    let mut _9: (*mut u8, usize);
+    let mut _10: *mut usize;
+    let mut _11: *mut u8;
+    let mut _12: (*mut u8, usize);
+    let mut _13: &[(*mut u8, usize); 2];
+    let mut _14: &[(*mut u8, usize)];
+    let mut _15: ();
+
+    bb0: {
+        _7 = &raw mut _1;
+        _8 = move _7 as *mut u8 (PtrToPtr);
+        _9 = (move _8, const <[u32; 8] as core::mem::SizedTypeProperties>::SIZE);
+        _6[0 of 2] = move _9;
+        _10 = &raw mut _2;
+        _11 = move _10 as *mut u8 (PtrToPtr);
+        _12 = (move _11, const <usize as core::mem::SizedTypeProperties>::SIZE);
+        _6[1 of 2] = move _12;
+        _13 = &_6;
+        _14 = move _13 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _15 = checkpoint(move _14) -> [return: bb3, unwind continue];
+    }
+
+    bb1: {
+        _4 = copy _2;
+        _5 = Lt(copy _4, const 8_usize);
+        assert(move _5, "index out of bounds: the length is {} but the index is {}", const 8_usize, copy _4) -> [success: bb2, unwind continue];
+    }
+
+    bb2: {
+        _0 = copy _1[_4];
+        return;
+    }
+
+    bb3: {
+        _3 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+const dynamic_index_read::{constant#0}: usize = const 8_usize;
+
+fn dynamic_index_store(_1: [u32; 8], _2: usize, _3: u32) -> u32 {
+    debug buf => _1;
+    debug i => _2;
+    debug v => _3;
+    let mut _0: u32;
+    let _4: ();
+    let mut _5: u32;
+    let _6: usize;
+    let mut _7: bool;
+    let _8: usize;
+    let mut _9: bool;
+    let mut _10: [(*mut u8, usize); 3];
+    let mut _11: *mut [u32; 8];
+    let mut _12: *mut u8;
+    let mut _13: (*mut u8, usize);
+    let mut _14: *mut usize;
+    let mut _15: *mut u8;
+    let mut _16: (*mut u8, usize);
+    let mut _17: *mut u32;
+    let mut _18: *mut u8;
+    let mut _19: (*mut u8, usize);
+    let mut _20: &[(*mut u8, usize); 3];
+    let mut _21: &[(*mut u8, usize)];
+    let mut _22: ();
+
+    bb0: {
+        _11 = &raw mut _1;
+        _12 = move _11 as *mut u8 (PtrToPtr);
+        _13 = (move _12, const <[u32; 8] as core::mem::SizedTypeProperties>::SIZE);
+        _10[0 of 3] = move _13;
+        _14 = &raw mut _2;
+        _15 = move _14 as *mut u8 (PtrToPtr);
+        _16 = (move _15, const <usize as core::mem::SizedTypeProperties>::SIZE);
+        _10[1 of 3] = move _16;
+        _17 = &raw mut _3;
+        _18 = move _17 as *mut u8 (PtrToPtr);
+        _19 = (move _18, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _10[2 of 3] = move _19;
+        _20 = &_10;
+        _21 = move _20 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _22 = checkpoint(move _21) -> [return: bb4, unwind continue];
+    }
+
+    bb1: {
+        _5 = copy _3;
+        _6 = copy _2;
+        _7 = Lt(copy _6, const 8_usize);
+        assert(move _7, "index out of bounds: the length is {} but the index is {}", const 8_usize, copy _6) -> [success: bb2, unwind continue];
+    }
+
+    bb2: {
+        _1[_6] = move _5;
+        _8 = const 3_usize;
+        _9 = Lt(copy _8, const 8_usize);
+        assert(move _9, "index out of bounds: the length is {} but the index is {}", const 8_usize, copy _8) -> [success: bb3, unwind continue];
+    }
+
+    bb3: {
+        _0 = copy _1[_8];
+        return;
+    }
+
+    bb4: {
+        _4 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+const dynamic_index_store::{constant#0}: usize = const 8_usize;
+
+fn partial_move(_1: Outer) -> u64 {
+    debug o => _1;
+    let mut _0: u64;
+    let _2: Inner;
+    let _3: ();
+    let mut _4: u64;
+    let mut _5: u64;
+    let mut _6: u32;
+    let mut _7: (u64, bool);
+    let mut _8: [(*mut u8, usize); 2];
+    let mut _9: *mut u32;
+    let mut _10: *mut u8;
+    let mut _11: (*mut u8, usize);
+    let mut _12: *mut u64;
+    let mut _13: *mut u8;
+    let mut _14: (*mut u8, usize);
+    let mut _15: &[(*mut u8, usize); 2];
+    let mut _16: &[(*mut u8, usize)];
+    let mut _17: ();
+    scope 1 {
+        debug taken => _2;
+    }
+
+    bb0: {
+        _9 = &raw mut (_1.1: u32);
+        _10 = move _9 as *mut u8 (PtrToPtr);
+        _11 = (move _10, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _8[0 of 2] = move _11;
+        _12 = &raw mut (_2.0: u64);
+        _13 = move _12 as *mut u8 (PtrToPtr);
+        _14 = (move _13, const <u64 as core::mem::SizedTypeProperties>::SIZE);
+        _8[1 of 2] = move _14;
+        _15 = &_8;
+        _16 = move _15 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _17 = checkpoint(move _16) -> [return: bb3, unwind continue];
+    }
+
+    bb1: {
+        _4 = copy (_2.0: u64);
+        _6 = copy (_1.1: u32);
+        _5 = move _6 as u64 (IntToInt);
+        _7 = AddWithOverflow(copy _4, copy _5);
+        assert(!move (_7.1: bool), "attempt to compute `{} + {}`, which would overflow", move _4, move _5) -> [success: bb2, unwind continue];
+    }
+
+    bb2: {
+        _0 = move (_7.0: u64);
+        return;
+    }
+
+    bb3: {
+        _2 = move (_1.0: Inner);
+        (_1.1: u32) = const 9_u32;
+        _3 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn mutable_arg(_1: &mut State) -> () {
+    debug state => _1;
+    let mut _0: ();
+    let _2: ();
+    let mut _3: [(*mut u8, usize); 0];
+    let mut _4: &[(*mut u8, usize); 0];
+    let mut _5: &[(*mut u8, usize)];
+    let mut _6: ();
+
+    bb0: {
+        _4 = &_3;
+        _5 = move _4 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _6 = checkpoint(move _5) -> [return: bb2, unwind continue];
+    }
+
+    bb1: {
+        ((((*_1).1: Position).0: Coordinates).1: f32) = const 2f32;
+        ((*_1).0: u32) = const 7_u32;
+        return;
+    }
+
+    bb2: {
+        ((((*_1).1: Position).0: Coordinates).0: f32) = const 1f32;
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn deref_field(_1: &State) -> f32 {
+    debug state => _1;
+    let mut _0: f32;
+    let _2: ();
+    let mut _3: [(*mut u8, usize); 1];
+    let mut _4: *const f32;
+    let mut _5: *mut u8;
+    let mut _6: (*mut u8, usize);
+    let mut _7: &[(*mut u8, usize); 1];
+    let mut _8: &[(*mut u8, usize)];
+    let mut _9: ();
+
+    bb0: {
+        _4 = &raw const ((((*_1).1: Position).0: Coordinates).0: f32);
+        _5 = move _4 as *mut u8 (PtrToPtr);
+        _6 = (move _5, const <f32 as core::mem::SizedTypeProperties>::SIZE);
+        _3[0 of 1] = move _6;
+        _7 = &_3;
+        _8 = move _7 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _9 = checkpoint(move _8) -> [return: bb2, unwind continue];
+    }
+
+    bb1: {
+        _0 = copy ((((*_1).1: Position).0: Coordinates).0: f32);
+        return;
+    }
+
+    bb2: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn callee_write_not_observed(_1: State) -> u32 {
+    debug s => _1;
+    let mut _0: u32;
+    let _2: ();
+    let mut _3: &mut Position;
+    let _4: ();
+    let mut _5: [(*mut u8, usize); 0];
+    let mut _6: &[(*mut u8, usize); 0];
+    let mut _7: &[(*mut u8, usize)];
+    let mut _8: ();
+    let mut _9: [(*mut u8, usize); 1];
+    let mut _10: *mut u32;
+    let mut _11: *mut u8;
+    let mut _12: (*mut u8, usize);
+    let mut _13: &[(*mut u8, usize); 1];
+    let mut _14: &[(*mut u8, usize)];
+    let mut _15: ();
+
+    bb0: {
+        _6 = &_5;
+        _7 = move _6 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _8 = checkpoint(move _7) -> [return: bb3, unwind continue];
+    }
+
+    bb1: {
+        _10 = &raw mut (_1.0: u32);
+        _11 = move _10 as *mut u8 (PtrToPtr);
+        _12 = (move _11, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _9[0 of 1] = move _12;
+        _13 = &_9;
+        _14 = move _13 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _15 = checkpoint(move _14) -> [return: bb4, unwind continue];
+    }
+
+    bb2: {
+        _0 = copy (_1.0: u32);
+        return;
+    }
+
+    bb3: {
+        _3 = &mut (_1.1: Position);
+        _2 = update_position(copy _3) -> [return: bb1, unwind continue];
+    }
+
+    bb4: {
+        _4 = barrier() -> [return: bb2, unwind continue];
+    }
+}
+
+fn call_prep_temp_in_block(_1: u32, _2: u32) -> u32 {
+    debug a => _1;
+    debug keep => _2;
+    let mut _0: u32;
+    let _3: u64;
+    let mut _4: u64;
+    let mut _5: (u64, bool);
+    let _6: u64;
+    let mut _7: (u32, u64, [u8; 64]);
+    let mut _8: [u8; 64];
+    let mut _9: [(*mut u8, usize); 1];
+    let mut _10: *mut u32;
+    let mut _11: *mut u8;
+    let mut _12: (*mut u8, usize);
+    let mut _13: &[(*mut u8, usize); 1];
+    let mut _14: &[(*mut u8, usize)];
+    let mut _15: ();
+    scope 1 {
+        debug sum => _3;
+    }
+
+    bb0: {
+        _4 = copy _1 as u64 (IntToInt);
+        _5 = AddWithOverflow(copy _4, const 1_u64);
+        assert(!move (_5.1: bool), "attempt to compute `{} + {}`, which would overflow", move _4, const 1_u64) -> [success: bb1, unwind continue];
+    }
+
+    bb1: {
+        _10 = &raw mut _2;
+        _11 = move _10 as *mut u8 (PtrToPtr);
+        _12 = (move _11, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _9[0 of 1] = move _12;
+        _13 = &_9;
+        _14 = move _13 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _15 = checkpoint(move _14) -> [return: bb3, unwind continue];
+    }
+
+    bb2: {
+        _0 = copy _2;
+        return;
+    }
+
+    bb3: {
+        _3 = move (_5.0: u64);
+        _8 = [const 0_u8; 64];
+        _7 = (copy _1, copy _3, move _8);
+        _6 = consume_tuple(move _7) -> [return: bb2, unwind continue];
+    }
+}
+
+const call_prep_temp_in_block::{constant#0}: usize = const 64_usize;
+
+fn <impl at checkpoint_places.rs:307:1: 307:14>::bump(_1: &mut Position) -> () {
+    debug self => _1;
+    let mut _0: ();
+
+    bb0: {
+        (((*_1).0: Coordinates).0: f32) = Add(copy (((*_1).0: Coordinates).0: f32), const 1f32);
+        return;
+    }
+}
+
+fn mut_receiver_rebase(_1: State) -> f32 {
+    debug s => _1;
+    let mut _0: f32;
+    let _2: ();
+    let mut _3: &mut Position;
+    let _4: ();
+    let mut _5: [(*mut u8, usize); 0];
+    let mut _6: &[(*mut u8, usize); 0];
+    let mut _7: &[(*mut u8, usize)];
+    let mut _8: ();
+    let mut _9: [(*mut u8, usize); 1];
+    let mut _10: *mut f32;
+    let mut _11: *mut u8;
+    let mut _12: (*mut u8, usize);
+    let mut _13: &[(*mut u8, usize); 1];
+    let mut _14: &[(*mut u8, usize)];
+    let mut _15: ();
+
+    bb0: {
+        _6 = &_5;
+        _7 = move _6 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _8 = checkpoint(move _7) -> [return: bb3, unwind continue];
+    }
+
+    bb1: {
+        _10 = &raw mut (((_1.1: Position).0: Coordinates).0: f32);
+        _11 = move _10 as *mut u8 (PtrToPtr);
+        _12 = (move _11, const <f32 as core::mem::SizedTypeProperties>::SIZE);
+        _9[0 of 1] = move _12;
+        _13 = &_9;
+        _14 = move _13 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _15 = checkpoint(move _14) -> [return: bb4, unwind continue];
+    }
+
+    bb2: {
+        _0 = copy (((_1.1: Position).0: Coordinates).0: f32);
+        return;
+    }
+
+    bb3: {
+        _3 = &mut (_1.1: Position);
+        _2 = Position::bump(move _3) -> [return: bb1, unwind continue];
+    }
+
+    bb4: {
+        _4 = barrier() -> [return: bb2, unwind continue];
+    }
+}
+
+fn swap_fields(_1: &mut f32, _2: &mut f32) -> () {
+    debug a => _1;
+    debug b => _2;
+    let mut _0: ();
+    let _3: f32;
+    let mut _4: f32;
+    scope 1 {
+        debug t => _3;
+    }
+
+    bb0: {
+        _3 = copy (*_1);
+        _4 = copy (*_2);
+        (*_1) = move _4;
+        (*_2) = copy _3;
+        return;
+    }
+}
+
+fn multiple_mut_args(_1: Coordinates) -> f32 {
+    debug c => _1;
+    let mut _0: f32;
+    let _2: ();
+    let mut _3: &mut f32;
+    let mut _4: &mut f32;
+    let _5: ();
+    let mut _6: f32;
+    let mut _7: f32;
+    let mut _8: [(*mut u8, usize); 0];
+    let mut _9: &[(*mut u8, usize); 0];
+    let mut _10: &[(*mut u8, usize)];
+    let mut _11: ();
+    let mut _12: [(*mut u8, usize); 2];
+    let mut _13: *mut f32;
+    let mut _14: *mut u8;
+    let mut _15: (*mut u8, usize);
+    let mut _16: *mut f32;
+    let mut _17: *mut u8;
+    let mut _18: (*mut u8, usize);
+    let mut _19: &[(*mut u8, usize); 2];
+    let mut _20: &[(*mut u8, usize)];
+    let mut _21: ();
+
+    bb0: {
+        _9 = &_8;
+        _10 = move _9 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _11 = checkpoint(move _10) -> [return: bb3, unwind continue];
+    }
+
+    bb1: {
+        _13 = &raw mut (_1.0: f32);
+        _14 = move _13 as *mut u8 (PtrToPtr);
+        _15 = (move _14, const <f32 as core::mem::SizedTypeProperties>::SIZE);
+        _12[0 of 2] = move _15;
+        _16 = &raw mut (_1.1: f32);
+        _17 = move _16 as *mut u8 (PtrToPtr);
+        _18 = (move _17, const <f32 as core::mem::SizedTypeProperties>::SIZE);
+        _12[1 of 2] = move _18;
+        _19 = &_12;
+        _20 = move _19 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _21 = checkpoint(move _20) -> [return: bb4, unwind continue];
+    }
+
+    bb2: {
+        _6 = copy (_1.0: f32);
+        _7 = copy (_1.1: f32);
+        _0 = Add(move _6, move _7);
+        return;
+    }
+
+    bb3: {
+        _3 = &mut (_1.0: f32);
+        _4 = &mut (_1.1: f32);
+        _2 = swap_fields(copy _3, copy _4) -> [return: bb1, unwind continue];
+    }
+
+    bb4: {
+        _5 = barrier() -> [return: bb2, unwind continue];
+    }
+}
+
+fn unknown_callee_fallback(_1: fn(u32) -> u32, _2: u32) -> u32 {
+    debug f => _1;
+    debug keep => _2;
+    let mut _0: u32;
+    let _3: u32;
+    let mut _4: u32;
+    let _5: ();
+    let mut _6: u32;
+    let mut _7: u32;
+    let mut _8: (u32, bool);
+    let mut _9: [(*mut u8, usize); 0];
+    let mut _10: &[(*mut u8, usize); 0];
+    let mut _11: &[(*mut u8, usize)];
+    let mut _12: ();
+    let mut _13: [(*mut u8, usize); 2];
+    let mut _14: *mut u32;
+    let mut _15: *mut u8;
+    let mut _16: (*mut u8, usize);
+    let mut _17: *mut u32;
+    let mut _18: *mut u8;
+    let mut _19: (*mut u8, usize);
+    let mut _20: &[(*mut u8, usize); 2];
+    let mut _21: &[(*mut u8, usize)];
+    let mut _22: ();
+    scope 1 {
+        debug r => _3;
+    }
+
+    bb0: {
+        _10 = &_9;
+        _11 = move _10 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _12 = checkpoint(move _11) -> [return: bb4, unwind continue];
+    }
+
+    bb1: {
+        _14 = &raw mut _2;
+        _15 = move _14 as *mut u8 (PtrToPtr);
+        _16 = (move _15, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _13[0 of 2] = move _16;
+        _17 = &raw mut _3;
+        _18 = move _17 as *mut u8 (PtrToPtr);
+        _19 = (move _18, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _13[1 of 2] = move _19;
+        _20 = &_13;
+        _21 = move _20 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _22 = checkpoint(move _21) -> [return: bb5, unwind continue];
+    }
+
+    bb2: {
+        _6 = copy _3;
+        _7 = copy _2;
+        _8 = AddWithOverflow(copy _6, copy _7);
+        assert(!move (_8.1: bool), "attempt to compute `{} + {}`, which would overflow", move _6, move _7) -> [success: bb3, unwind continue];
+    }
+
+    bb3: {
+        _0 = move (_8.0: u32);
+        return;
+    }
+
+    bb4: {
+        _4 = copy _2;
+        _3 = copy _1(move _4) -> [return: bb1, unwind continue];
+    }
+
+    bb5: {
+        _5 = barrier() -> [return: bb2, unwind continue];
+    }
+}
+
+fn external_callee(_1: u32) -> u32 {
+    debug keep => _1;
+    let mut _0: u32;
+    let _2: u32;
+    let _3: ();
+    let mut _4: [(*mut u8, usize); 0];
+    let mut _5: &[(*mut u8, usize); 0];
+    let mut _6: &[(*mut u8, usize)];
+    let mut _7: ();
+    let mut _8: [(*mut u8, usize); 1];
+    let mut _9: *mut u32;
+    let mut _10: *mut u8;
+    let mut _11: (*mut u8, usize);
+    let mut _12: &[(*mut u8, usize); 1];
+    let mut _13: &[(*mut u8, usize)];
+    let mut _14: ();
+    scope 1 {
+        debug r => _2;
+    }
+
+    bb0: {
+        _5 = &_4;
+        _6 = move _5 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _7 = checkpoint(move _6) -> [return: bb3, unwind continue];
+    }
+
+    bb1: {
+        _9 = &raw mut _2;
+        _10 = move _9 as *mut u8 (PtrToPtr);
+        _11 = (move _10, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _8[0 of 1] = move _11;
+        _12 = &_8;
+        _13 = move _12 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _14 = checkpoint(move _13) -> [return: bb4, unwind continue];
+    }
+
+    bb2: {
+        _0 = copy _2;
+        return;
+    }
+
+    bb3: {
+        _2 = core::hint::black_box::<u32>(copy _1) -> [return: bb1, unwind continue];
+    }
+
+    bb4: {
+        _3 = barrier() -> [return: bb2, unwind continue];
+    }
+}
+
+fn partial_init_branch(_1: bool, _2: u32, _3: u32) -> u32 {
+    debug pick => _1;
+    debug a => _2;
+    debug b => _3;
+    let mut _0: u32;
+    let _4: u32;
+    let _5: ();
+    let mut _6: [(*mut u8, usize); 1];
+    let mut _7: *mut u32;
+    let mut _8: *mut u8;
+    let mut _9: (*mut u8, usize);
+    let mut _10: &[(*mut u8, usize); 1];
+    let mut _11: &[(*mut u8, usize)];
+    let mut _12: ();
+    scope 1 {
+        debug x => _4;
+    }
+
+    bb0: {
+        switchInt(copy _1) -> [0: bb2, otherwise: bb1];
+    }
+
+    bb1: {
+        _4 = copy _2;
+        goto -> bb3;
+    }
+
+    bb2: {
+        _4 = copy _3;
+        goto -> bb3;
+    }
+
+    bb3: {
+        _7 = &raw mut _4;
+        _8 = move _7 as *mut u8 (PtrToPtr);
+        _9 = (move _8, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _6[0 of 1] = move _9;
+        _10 = &_6;
+        _11 = move _10 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _12 = checkpoint(move _11) -> [return: bb5, unwind continue];
+    }
+
+    bb4: {
+        _0 = copy _4;
+        return;
+    }
+
+    bb5: {
+        _5 = barrier() -> [return: bb4, unwind continue];
+    }
+}
+
+fn padding_struct(_1: Padded) -> u64 {
+    debug p => _1;
+    let mut _0: u64;
+    let _2: ();
+    let mut _3: [(*mut u8, usize); 1];
+    let mut _4: *mut u64;
+    let mut _5: *mut u8;
+    let mut _6: (*mut u8, usize);
+    let mut _7: &[(*mut u8, usize); 1];
+    let mut _8: &[(*mut u8, usize)];
+    let mut _9: ();
+
+    bb0: {
+        _4 = &raw mut (_1.1: u64);
+        _5 = move _4 as *mut u8 (PtrToPtr);
+        _6 = (move _5, const <u64 as core::mem::SizedTypeProperties>::SIZE);
+        _3[0 of 1] = move _6;
+        _7 = &_3;
+        _8 = move _7 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _9 = checkpoint(move _8) -> [return: bb2, unwind continue];
+    }
+
+    bb1: {
+        _0 = copy (_1.1: u64);
+        return;
+    }
+
+    bb2: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn aliasing_raw_ptrs(_1: u32) -> u32 {
+    debug v => _1;
+    let mut _0: u32;
+    let _2: *mut u32;
+    let _3: ();
+    let mut _4: [(*mut u8, usize); 1];
+    let mut _5: *mut u32;
+    let mut _6: *mut u8;
+    let mut _7: (*mut u8, usize);
+    let mut _8: &[(*mut u8, usize); 1];
+    let mut _9: &[(*mut u8, usize)];
+    let mut _10: ();
+    scope 1 {
+        debug p1 => _2;
+        scope 2 {
+            debug p2 => _2;
+        }
+    }
+
+    bb0: {
+        _5 = &raw mut _1;
+        _6 = move _5 as *mut u8 (PtrToPtr);
+        _7 = (move _6, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _4[0 of 1] = move _7;
+        _8 = &_4;
+        _9 = move _8 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _10 = checkpoint(move _9) -> [return: bb2, unwind continue];
+    }
+
+    bb1: {
+        (*_2) = const 9_u32;
+        _0 = copy _1;
+        return;
+    }
+
+    bb2: {
+        _2 = &raw mut _1;
+        _3 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn zero_sized_place(_1: WithMarker) -> ((), u32) {
+    debug w => _1;
+    let mut _0: ((), u32);
+    let _2: ();
+    let mut _3: u32;
+    let mut _4: [(*mut u8, usize); 2];
+    let mut _5: *mut ();
+    let mut _6: *mut u8;
+    let mut _7: (*mut u8, usize);
+    let mut _8: *mut u32;
+    let mut _9: *mut u8;
+    let mut _10: (*mut u8, usize);
+    let mut _11: &[(*mut u8, usize); 2];
+    let mut _12: &[(*mut u8, usize)];
+    let mut _13: ();
+
+    bb0: {
+        _5 = &raw mut (_1.0: ());
+        _6 = move _5 as *mut u8 (PtrToPtr);
+        _7 = (move _6, const <() as core::mem::SizedTypeProperties>::SIZE);
+        _4[0 of 2] = move _7;
+        _8 = &raw mut (_1.1: u32);
+        _9 = move _8 as *mut u8 (PtrToPtr);
+        _10 = (move _9, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _4[1 of 2] = move _10;
+        _11 = &_4;
+        _12 = move _11 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _13 = checkpoint(move _12) -> [return: bb2, unwind continue];
+    }
+
+    bb1: {
+        _3 = copy (_1.1: u32);
+        _0 = (const (), move _3);
+        return;
+    }
+
+    bb2: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn recursive_checkpoint(_1: u32, _2: u32) -> u32 {
+    debug n => _1;
+    debug acc => _2;
+    let mut _0: u32;
+    let mut _3: bool;
+    let mut _4: u32;
+    let _5: ();
+    let mut _6: u32;
+    let mut _7: u32;
+    let mut _8: (u32, bool);
+    let mut _9: u32;
+    let mut _10: u32;
+    let mut _11: u32;
+    let mut _12: (u32, bool);
+    let mut _13: [(*mut u8, usize); 2];
+    let mut _14: *mut u32;
+    let mut _15: *mut u8;
+    let mut _16: (*mut u8, usize);
+    let mut _17: *mut u32;
+    let mut _18: *mut u8;
+    let mut _19: (*mut u8, usize);
+    let mut _20: &[(*mut u8, usize); 2];
+    let mut _21: &[(*mut u8, usize)];
+    let mut _22: ();
+    let mut _23: [(*mut u8, usize); 1];
+    let mut _24: *mut u32;
+    let mut _25: *mut u8;
+    let mut _26: (*mut u8, usize);
+    let mut _27: &[(*mut u8, usize); 1];
+    let mut _28: &[(*mut u8, usize)];
+    let mut _29: ();
+
+    bb0: {
+        _4 = copy _1;
+        _3 = Eq(move _4, const 0_u32);
+        switchInt(move _3) -> [0: bb2, otherwise: bb1];
+    }
+
+    bb1: {
+        _0 = copy _2;
+        goto -> bb6;
+    }
+
+    bb2: {
+        _14 = &raw mut _1;
+        _15 = move _14 as *mut u8 (PtrToPtr);
+        _16 = (move _15, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _13[0 of 2] = move _16;
+        _17 = &raw mut _2;
+        _18 = move _17 as *mut u8 (PtrToPtr);
+        _19 = (move _18, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _13[1 of 2] = move _19;
+        _20 = &_13;
+        _21 = move _20 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _22 = checkpoint(move _21) -> [return: bb7, unwind continue];
+    }
+
+    bb3: {
+        _7 = copy _1;
+        _8 = SubWithOverflow(copy _7, const 1_u32);
+        assert(!move (_8.1: bool), "attempt to compute `{} - {}`, which would overflow", move _7, const 1_u32) -> [success: bb4, unwind continue];
+    }
+
+    bb4: {
+        _6 = move (_8.0: u32);
+        _10 = copy _2;
+        _11 = copy _1;
+        _12 = AddWithOverflow(copy _10, copy _11);
+        assert(!move (_12.1: bool), "attempt to compute `{} + {}`, which would overflow", move _10, move _11) -> [success: bb5, unwind continue];
+    }
+
+    bb5: {
+        _24 = &raw mut _0;
+        _25 = move _24 as *mut u8 (PtrToPtr);
+        _26 = (move _25, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _23[0 of 1] = move _26;
+        _27 = &_23;
+        _28 = move _27 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _29 = checkpoint(move _28) -> [return: bb8, unwind continue];
+    }
+
+    bb6: {
+        return;
+    }
+
+    bb7: {
+        _5 = barrier() -> [return: bb3, unwind continue];
+    }
+
+    bb8: {
+        _9 = move (_12.0: u32);
+        _0 = recursive_checkpoint(move _6, move _9) -> [return: bb6, unwind continue];
+    }
+}
+
+fn <impl at checkpoint_places.rs:480:1: 480:20>::drop(_1: &mut Guard) -> () {
+    debug self => _1;
+    let mut _0: ();
+
+    bb0: {
+        return;
+    }
+}
+
+fn unwind_edge(_1: Guard, _2: u32) -> u32 {
+    debug g => _1;
+    debug keep => _2;
+    let mut _0: u32;
+    let _3: ();
+    let _4: u64;
+    let mut _5: (u32, u64, [u8; 64]);
+    let mut _6: u32;
+    let mut _7: [u8; 64];
+    let mut _8: [(*mut u8, usize); 2];
+    let mut _9: *mut Guard;
+    let mut _10: *mut u8;
+    let mut _11: (*mut u8, usize);
+    let mut _12: *mut u32;
+    let mut _13: *mut u8;
+    let mut _14: (*mut u8, usize);
+    let mut _15: &[(*mut u8, usize); 2];
+    let mut _16: &[(*mut u8, usize)];
+    let mut _17: ();
+    let mut _18: [(*mut u8, usize); 2];
+    let mut _19: *mut Guard;
+    let mut _20: *mut u8;
+    let mut _21: (*mut u8, usize);
+    let mut _22: *mut u32;
+    let mut _23: *mut u8;
+    let mut _24: (*mut u8, usize);
+    let mut _25: &[(*mut u8, usize); 2];
+    let mut _26: &[(*mut u8, usize)];
+    let mut _27: ();
+
+    bb0: {
+        _9 = &raw mut _1;
+        _10 = move _9 as *mut u8 (PtrToPtr);
+        _11 = (move _10, const <Guard as core::mem::SizedTypeProperties>::SIZE);
+        _8[0 of 2] = move _11;
+        _12 = &raw mut _2;
+        _13 = move _12 as *mut u8 (PtrToPtr);
+        _14 = (move _13, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _8[1 of 2] = move _14;
+        _15 = &_8;
+        _16 = move _15 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _17 = checkpoint(move _16) -> [return: bb6, unwind continue];
+    }
+
+    bb1: {
+        _19 = &raw mut _1;
+        _20 = move _19 as *mut u8 (PtrToPtr);
+        _21 = (move _20, const <Guard as core::mem::SizedTypeProperties>::SIZE);
+        _18[0 of 2] = move _21;
+        _22 = &raw mut _2;
+        _23 = move _22 as *mut u8 (PtrToPtr);
+        _24 = (move _23, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _18[1 of 2] = move _24;
+        _25 = &_18;
+        _26 = move _25 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _27 = checkpoint(move _26) -> [return: bb7, unwind continue];
+    }
+
+    bb2: {
+        _0 = copy _2;
+        drop(_1) -> [return: bb3, unwind continue];
+    }
+
+    bb3: {
+        return;
+    }
+
+    bb4 (cleanup): {
+        drop(_1) -> [return: bb5, unwind terminate(cleanup)];
+    }
+
+    bb5 (cleanup): {
+        resume;
+    }
+
+    bb6: {
+        _3 = barrier() -> [return: bb1, unwind: bb4];
+    }
+
+    bb7: {
+        _6 = copy _2;
+        _7 = [const 0_u8; 64];
+        _5 = (move _6, const 0_u64, move _7);
+        _4 = consume_tuple(move _5) -> [return: bb2, unwind: bb4];
+    }
+}
+
+const unwind_edge::{constant#0}: usize = const 64_usize;
+
+const Boxed::heap::{constant#0}: usize = const 4_usize;
+
+fn enum_downcast(_1: Tagged) -> u64 {
+    debug t => _1;
+    let mut _0: u64;
+    let _2: ();
+    let mut _3: isize;
+    let _4: u32;
+    let _5: u64;
+    let mut _6: [(*mut u8, usize); 1];
+    let mut _7: *mut Tagged;
+    let mut _8: *mut u8;
+    let mut _9: (*mut u8, usize);
+    let mut _10: &[(*mut u8, usize); 1];
+    let mut _11: &[(*mut u8, usize)];
+    let mut _12: ();
+    scope 1 {
+        debug v => _4;
+    }
+    scope 2 {
+        debug value => _5;
+    }
+
+    bb0: {
+        _7 = &raw mut _1;
+        _8 = move _7 as *mut u8 (PtrToPtr);
+        _9 = (move _8, const <Tagged as core::mem::SizedTypeProperties>::SIZE);
+        _6[0 of 1] = move _9;
+        _10 = &_6;
+        _11 = move _10 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _12 = checkpoint(move _11) -> [return: bb6, unwind continue];
+    }
+
+    bb1: {
+        _3 = discriminant(_1);
+        switchInt(move _3) -> [0: bb4, 1: bb3, otherwise: bb2];
+    }
+
+    bb2: {
+        unreachable;
+    }
+
+    bb3: {
+        _5 = copy ((_1 as Large).0: u64);
+        _0 = copy _5;
+        goto -> bb5;
+    }
+
+    bb4: {
+        _4 = copy ((_1 as Small).0: u32);
+        _0 = copy _4 as u64 (IntToInt);
+        goto -> bb5;
+    }
+
+    bb5: {
+        return;
+    }
+
+    bb6: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn union_field(_1: Overlap) -> u32 {
+    debug u => _1;
+    let mut _0: u32;
+    let _2: ();
+    let mut _3: [(*mut u8, usize); 1];
+    let mut _4: *mut u32;
+    let mut _5: *mut u8;
+    let mut _6: (*mut u8, usize);
+    let mut _7: &[(*mut u8, usize); 1];
+    let mut _8: &[(*mut u8, usize)];
+    let mut _9: ();
+
+    bb0: {
+        _4 = &raw mut (_1.0: u32);
+        _5 = move _4 as *mut u8 (PtrToPtr);
+        _6 = (move _5, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _3[0 of 1] = move _6;
+        _7 = &_3;
+        _8 = move _7 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _9 = checkpoint(move _8) -> [return: bb2, unwind continue];
+    }
+
+    bb1: {
+        _0 = copy (_1.0: u32);
+        return;
+    }
+
+    bb2: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn through_box(_1: Boxed) -> u32 {
+    debug b => _1;
+    let mut _0: u32;
+    let _2: ();
+    let mut _3: u32;
+    let _4: usize;
+    let mut _5: bool;
+    let mut _6: u32;
+    let mut _7: u8;
+    let mut _8: (u32, bool);
+    let mut _9: [(*mut u8, usize); 1];
+    let mut _10: *mut Boxed;
+    let mut _11: *mut u8;
+    let mut _12: (*mut u8, usize);
+    let mut _13: &[(*mut u8, usize); 1];
+    let mut _14: &[(*mut u8, usize)];
+    let mut _15: ();
+    let mut _16: alloc::boxed::Box<[u32; 4]>;
+    let mut _17: *const [u32; 4];
+
+    bb0: {
+        _10 = &raw mut _1;
+        _11 = move _10 as *mut u8 (PtrToPtr);
+        _12 = (move _11, const <Boxed as core::mem::SizedTypeProperties>::SIZE);
+        _9[0 of 1] = move _12;
+        _13 = &_9;
+        _14 = move _13 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _15 = checkpoint(move _14) -> [return: bb7, unwind continue];
+    }
+
+    bb1: {
+        _4 = const 0_usize;
+        _5 = Lt(copy _4, const 4_usize);
+        assert(move _5, "index out of bounds: the length is {} but the index is {}", const 4_usize, copy _4) -> [success: bb2, unwind: bb5];
+    }
+
+    bb2: {
+        _16 = copy (_1.0: alloc::boxed::Box<[u32; 4]>);
+        _17 = copy ((_16.0: core::ptr::Unique<[u32; 4]>).0: core::ptr::NonNull<[u32; 4]>) as *const [u32; 4] (Transmute);
+        _3 = copy (*_17)[_4];
+        _7 = copy (_1.1: u8);
+        _6 = move _7 as u32 (IntToInt);
+        _8 = AddWithOverflow(copy _3, copy _6);
+        assert(!move (_8.1: bool), "attempt to compute `{} + {}`, which would overflow", move _3, move _6) -> [success: bb3, unwind: bb5];
+    }
+
+    bb3: {
+        _0 = move (_8.0: u32);
+        drop(_1) -> [return: bb4, unwind continue];
+    }
+
+    bb4: {
+        return;
+    }
+
+    bb5 (cleanup): {
+        drop(_1) -> [return: bb6, unwind terminate(cleanup)];
+    }
+
+    bb6 (cleanup): {
+        resume;
+    }
+
+    bb7: {
+        _2 = barrier() -> [return: bb1, unwind: bb5];
+    }
+}
+
+fn through_slice(_1: &[u32]) -> u32 {
+    debug s => _1;
+    let mut _0: u32;
+    let _2: ();
+    let _3: usize;
+    let mut _4: usize;
+    let mut _5: bool;
+    let mut _6: [(*mut u8, usize); 1];
+    let mut _7: *mut &[u32];
+    let mut _8: *mut u8;
+    let mut _9: (*mut u8, usize);
+    let mut _10: &[(*mut u8, usize); 1];
+    let mut _11: &[(*mut u8, usize)];
+    let mut _12: ();
+
+    bb0: {
+        _7 = &raw mut _1;
+        _8 = move _7 as *mut u8 (PtrToPtr);
+        _9 = (move _8, const <&[u32] as core::mem::SizedTypeProperties>::SIZE);
+        _6[0 of 1] = move _9;
+        _10 = &_6;
+        _11 = move _10 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _12 = checkpoint(move _11) -> [return: bb3, unwind continue];
+    }
+
+    bb1: {
+        _3 = const 0_usize;
+        _4 = PtrMetadata(copy _1);
+        _5 = Lt(copy _3, copy _4);
+        assert(move _5, "index out of bounds: the length is {} but the index is {}", move _4, copy _3) -> [success: bb2, unwind continue];
+    }
+
+    bb2: {
+        _0 = copy (*_1)[_3];
+        return;
+    }
+
+    bb3: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn through_raw_pointer(_1: *mut u32) -> u32 {
+    debug p => _1;
+    let mut _0: u32;
+    let _2: ();
+    let mut _3: [(*mut u8, usize); 1];
+    let mut _4: *mut *mut u32;
+    let mut _5: *mut u8;
+    let mut _6: (*mut u8, usize);
+    let mut _7: &[(*mut u8, usize); 1];
+    let mut _8: &[(*mut u8, usize)];
+    let mut _9: ();
+
+    bb0: {
+        _4 = &raw mut _1;
+        _5 = move _4 as *mut u8 (PtrToPtr);
+        _6 = (move _5, const <*mut u32 as core::mem::SizedTypeProperties>::SIZE);
+        _3[0 of 1] = move _6;
+        _7 = &_3;
+        _8 = move _7 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _9 = checkpoint(move _8) -> [return: bb2, unwind continue];
+    }
+
+    bb1: {
+        _0 = copy (*_1);
+        return;
+    }
+
+    bb2: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn generic_tuple(_1: (T, u32)) -> u32 {
+    debug t => _1;
+    let mut _0: u32;
+    let _2: ();
+    let mut _3: [(*mut u8, usize); 1];
+    let mut _4: *mut u32;
+    let mut _5: *mut u8;
+    let mut _6: (*mut u8, usize);
+    let mut _7: &[(*mut u8, usize); 1];
+    let mut _8: &[(*mut u8, usize)];
+    let mut _9: ();
+
+    bb0: {
+        _4 = &raw mut (_1.1: u32);
+        _5 = move _4 as *mut u8 (PtrToPtr);
+        _6 = (move _5, const <u32 as core::mem::SizedTypeProperties>::SIZE);
+        _3[0 of 1] = move _6;
+        _7 = &_3;
+        _8 = move _7 as &[(*mut u8, usize)] (PointerCoercion(Unsize, Implicit));
+        _9 = checkpoint(move _8) -> [return: bb2, unwind continue];
+    }
+
+    bb1: {
+        _0 = copy (_1.1: u32);
+        return;
+    }
+
+    bb2: {
+        _2 = barrier() -> [return: bb1, unwind continue];
+    }
+}
+
+fn Guard(_1: u32) -> Guard {
+    let mut _0: Guard;
+
+    bb0: {
+        _0 = Guard(move _1);
+        return;
+    }
+}
+
+// MIR FOR CTFE
+fn Guard(_1: u32) -> Guard {
+    let mut _0: Guard;
+
+    bb0: {
+        _0 = Guard(move _1);
+        return;
+    }
+}
+
+fn Tagged::Small(_1: u32) -> Tagged {
+    let mut _0: Tagged;
+
+    bb0: {
+        _0 = Tagged::Small(move _1);
+        return;
+    }
+}
+
+// MIR FOR CTFE
+fn Tagged::Small(_1: u32) -> Tagged {
+    let mut _0: Tagged;
+
+    bb0: {
+        _0 = Tagged::Small(move _1);
+        return;
+    }
+}
