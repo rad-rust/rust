@@ -676,15 +676,15 @@ fn transform_gen_context<'tcx>(body: &mut Body<'tcx>) {
     body.arg_count = 1;
 }
 
-struct LivenessInfo {
+pub(crate) struct LivenessInfo {
     /// Which locals are live across any suspension point.
-    saved_locals: CoroutineSavedLocals,
+    pub(crate) saved_locals: CoroutineSavedLocals,
 
     /// The set of saved locals live at each suspension point.
-    live_locals_at_suspension_points: Vec<DenseBitSet<CoroutineSavedLocal>>,
+    pub(crate) live_locals_at_suspension_points: Vec<DenseBitSet<CoroutineSavedLocal>>,
 
     /// Parallel vec to the above with SourceInfo for each yield terminator.
-    source_info_at_suspension_points: Vec<SourceInfo>,
+    pub(crate) source_info_at_suspension_points: Vec<SourceInfo>,
 
     /// For every saved local, the set of other saved locals that are
     /// storage-live at the same time as this local. We cannot overlap locals in
@@ -705,7 +705,7 @@ struct LivenessInfo {
 /// - a local has to be stored if it is either directly used after the
 ///   the suspend point, or if it is live and has been previously borrowed.
 #[tracing::instrument(level = "trace", skip(tcx, body))]
-fn locals_live_across_suspend_points<'tcx>(
+pub(crate) fn locals_live_across_suspend_points<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &Body<'tcx>,
     always_live_locals: &DenseBitSet<Local>,
@@ -814,7 +814,7 @@ fn locals_live_across_suspend_points<'tcx>(
 /// `CoroutineSavedLocal` is indexed in terms of the elements in this set;
 /// i.e. `CoroutineSavedLocal::new(1)` corresponds to the second local
 /// included in this set.
-struct CoroutineSavedLocals(DenseBitSet<Local>);
+pub(crate) struct CoroutineSavedLocals(DenseBitSet<Local>);
 
 impl CoroutineSavedLocals {
     /// Returns an iterator over each `CoroutineSavedLocal` along with the `Local` it corresponds
@@ -836,7 +836,7 @@ impl CoroutineSavedLocals {
         out
     }
 
-    fn get(&self, local: Local) -> Option<CoroutineSavedLocal> {
+    pub(crate) fn get(&self, local: Local) -> Option<CoroutineSavedLocal> {
         if !self.contains(local) {
             return None;
         }

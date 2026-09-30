@@ -172,6 +172,7 @@ declare_passes! {
     mod post_drop_elaboration : CheckLiveDrops;
     mod prettify : ReorderBasicBlocks, ReorderLocals;
     mod promote_consts : PromoteTemps;
+    mod rad_write_sets : RadWriteSets;
     mod ref_prop : ReferencePropagation;
     mod remove_noop_landing_pads : RemoveNoopLandingPads;
     mod remove_place_mention : RemovePlaceMention;
@@ -655,6 +656,9 @@ fn run_runtime_lowering_passes<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
         &add_retag::AddRetag,
         &erase_deref_temps::EraseDerefTemps,
         &elaborate_box_derefs::ElaborateBoxDerefs,
+        // Prints write sets (`-Zrad-write-sets`); needs drop flags, and coroutine locals not yet
+        // moved into the coroutine's state.
+        &rad_write_sets::RadWriteSets,
         &coroutine::StateTransform,
         &Lint(known_panics_lint::KnownPanicsLint),
     ];
