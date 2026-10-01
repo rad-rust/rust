@@ -23,8 +23,11 @@
 //! references (`&mut`, raw `*mut`, or `&` to a type with interior mutability), plus their
 //! return value.
 
+use std::borrow::Cow;
+use std::cell::RefCell;
 use std::hash::Hash;
 
+use itertools::Itertools;
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap, FxIndexSet};
 use rustc_hir as hir;
 use rustc_index::IndexVec;
@@ -34,7 +37,9 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, CoroutineArgsExt, Ty, TyCtxt, TypingEnv};
 use rustc_mir_dataflow::impls::always_storage_live_locals;
 use rustc_session::Session;
+use rustc_span::Symbol;
 use rustc_span::source_map::Spanned;
+use smallvec::SmallVec;
 
 use crate::coroutine::{LivenessInfo, locals_live_across_suspend_points};
 
@@ -67,8 +72,8 @@ impl<'tcx> crate::MirPass<'tcx> for RadWriteSets {
     }
 }
 
-/// How a place gets written. Callers pass one of the direct kinds; `record_targets` turns a
-/// store through a reference into `ThroughRef` or `WriteSite` depending on its target.
+/// How a place gets written. `store` labels a store through a pointer `ThroughRef`, and
+/// `record_targets` labels any write to unknown memory `WriteSite`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum WriteKind {
     /// An assignment or `SetDiscriminant` to the place.
@@ -155,48 +160,46 @@ impl<'tcx> Target<'tcx> {
     }
 }
 
-/// Where a segment starts.
+/// Where a segment starts: the entry, or resuming after the `Yield` ending the given block.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 enum SegmentStart {
     Entry,
-    Resume(usize),
+    Resume(BasicBlock),
 }
 
-/// Where a segment ends. Ordered as printed: suspension points in order, then the return.
+/// Where a segment ends: the `Yield` ending the given block, or the return. Ordered as printed:
+/// suspension points in block order, which is how `StateTransform` numbers them, then the return.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 enum SegmentEnd {
-    Suspend(usize),
+    Suspend(BasicBlock),
     Return,
 }
 
-/// The dataflow state at a program point: where the current segment may have started, what it
-/// has written so far, and what each local may point to. A finished segment is a `State` with
-/// an empty `points_to`.
-#[derive(Clone, PartialEq, Eq, Default)]
+/// The dataflow state at a program point: what each local may point to.
+#[derive(Clone, Default)]
 struct State<'tcx> {
-    starts: FxIndexSet<SegmentStart>,
-    writes: FxIndexMap<Write<'tcx>, FxIndexSet<Location>>,
-    points_to: FxHashMap<Local, FxIndexSet<Target<'tcx>>>,
+    points_to: FxIndexMap<Local, FxIndexSet<Target<'tcx>>>,
 }
 
 impl<'tcx> State<'tcx> {
     /// Adds everything in `other`; returns whether `self` grew.
     fn join(&mut self, other: &Self) -> bool {
-        let mut changed = union(&mut self.starts, other.starts.iter().copied());
-        for (write, locations) in &other.writes {
-            changed |= union(self.writes.entry(*write).or_default(), locations.iter().copied());
-        }
-        // Order independent: the sets are only unioned.
-        #[allow(rustc::potential_query_instability)]
+        let mut changed = false;
         for (local, targets) in &other.points_to {
             changed |= union(self.points_to.entry(*local).or_default(), targets.iter().copied());
         }
         changed
     }
+}
 
-    fn record(&mut self, write: Write<'tcx>, location: Location) {
-        self.writes.entry(write).or_default().insert(location);
-    }
+/// Writes, with the locations each happens at.
+type Writes<'tcx> = FxIndexMap<Write<'tcx>, FxIndexSet<Location>>;
+
+/// A segment: where it may have started, and every write between there and its end.
+#[derive(Default)]
+struct Segment<'tcx> {
+    starts: FxIndexSet<SegmentStart>,
+    writes: Writes<'tcx>,
 }
 
 /// Adds `from` to `into`; returns whether `into` grew.
@@ -210,24 +213,27 @@ struct WriteSetAnalysis<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
     body: &'a Body<'tcx>,
     typing_env: TypingEnv<'tcx>,
-    /// The index of each suspension point, in block order (as `StateTransform` numbers them).
-    suspension_of: FxHashMap<BasicBlock, usize>,
+    /// `pointee_access` results for this body, by type and path.
+    access_cache: RefCell<FxHashMap<(Ty<'tcx>, Access), Option<Access>>>,
 }
 
 impl<'a, 'tcx> WriteSetAnalysis<'a, 'tcx> {
     fn new(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>) -> Self {
-        let suspension_of = body
-            .basic_blocks
-            .iter_enumerated()
-            .filter(|(_, data)| matches!(data.terminator().kind, TerminatorKind::Yield { .. }))
-            .enumerate()
-            .map(|(index, (bb, _))| (bb, index))
-            .collect();
-        Self { tcx, body, typing_env: body.typing_env(tcx), suspension_of }
+        Self { tcx, body, typing_env: body.typing_env(tcx), access_cache: Default::default() }
     }
 
-    /// Runs the dataflow and returns every segment, keyed by where it ends.
-    fn run(&self) -> FxIndexMap<SegmentEnd, State<'tcx>> {
+    /// Returns every segment, keyed by where it ends, in order. Writes don't affect what any
+    /// local points to, so this takes three steps: what each local may point to at the entry of
+    /// each block (a fixpoint), each block's writes (recorded once, from that final state), and
+    /// the segments each block's writes belong to.
+    fn run(&self) -> FxIndexMap<SegmentEnd, Segment<'tcx>> {
+        let entry = self.points_to_at_entry();
+        let block_writes = self.block_writes(entry);
+        self.segments(&block_writes)
+    }
+
+    /// What each local may point to at the entry of each block; `None` for blocks never reached.
+    fn points_to_at_entry(&self) -> IndexVec<BasicBlock, Option<State<'tcx>>> {
         let blocks = &self.body.basic_blocks;
         let mut entry: IndexVec<BasicBlock, Option<State<'tcx>>> =
             IndexVec::from_elem_n(None, blocks.len());
@@ -240,109 +246,211 @@ impl<'a, 'tcx> WriteSetAnalysis<'a, 'tcx> {
             .map(|arg| (arg, self.pointers_in(self.body.local_decls[arg].ty, Access::Unique)))
             .filter(|(_, pointers)| !pointers.is_empty())
             .collect();
-        entry[START_BLOCK] = Some(State {
-            starts: FxIndexSet::from_iter([SegmentStart::Entry]),
-            writes: Default::default(),
-            points_to,
-        });
+        entry[START_BLOCK] = Some(State { points_to });
 
-        let mut segments: FxIndexMap<SegmentEnd, State<'tcx>> = FxIndexMap::default();
         let mut queue: Vec<BasicBlock> = blocks.reverse_postorder().iter().rev().copied().collect();
         let mut queued = DenseBitSet::new_filled(blocks.len());
 
         while let Some(bb) = queue.pop() {
             queued.remove(bb);
+            // A working copy: the entry state itself is kept, to tell whether a later join into
+            // it adds anything.
             let Some(mut state) = entry[bb].clone() else { continue };
-            let data = &blocks[bb];
+            self.apply_block(&mut state, None, bb);
 
-            for (statement_index, statement) in data.statements.iter().enumerate() {
-                self.statement(&mut state, statement, Location { block: bb, statement_index });
-            }
-
-            let location = self.body.terminator_loc(bb);
-            let mut out: Vec<(BasicBlock, State<'tcx>)> = Vec::new();
-            match &data.terminator().kind {
-                TerminatorKind::Yield { resume, resume_arg, drop, .. } => {
-                    // Resuming (or being dropped while suspended) starts a new segment, with the
-                    // same pointers.
-                    let index = self.suspension_of[&bb];
-                    let mut next = State {
-                        starts: FxIndexSet::from_iter([SegmentStart::Resume(index)]),
-                        writes: Default::default(),
-                        points_to: std::mem::take(&mut state.points_to),
-                    };
-                    segments.entry(SegmentEnd::Suspend(index)).or_default().join(&state);
-                    let resume_write =
-                        Write { place: *resume_arg, kind: WriteKind::Resume, via: None };
-                    next.record(resume_write, location);
-                    out.push((*resume, next.clone()));
-                    out.extend(drop.map(|drop| (drop, next)));
-                }
-                TerminatorKind::Return => {
-                    state.points_to.clear();
-                    segments.entry(SegmentEnd::Return).or_default().join(&state);
-                }
-                kind => {
-                    self.terminator(&mut state, kind, location);
-                    out.extend(data.terminator().successors().map(|succ| (succ, state.clone())));
-                }
-            }
-
-            for (succ, succ_state) in out {
+            // Joins `state` into the entry of `succ`, queueing it if that grew. The first time a
+            // block is reached, `state` becomes its entry: moved if owned, copied if borrowed.
+            let mut propagate = |succ: BasicBlock, state: Cow<'_, State<'tcx>>| {
                 let changed = match &mut entry[succ] {
-                    Some(existing) => existing.join(&succ_state),
+                    Some(existing) => existing.join(&state),
                     slot @ None => {
-                        *slot = Some(succ_state);
+                        *slot = Some(state.into_owned());
                         true
                     }
                 };
                 if changed && queued.insert(succ) {
                     queue.push(succ);
                 }
+            };
+
+            // Every edge but the last gets a borrow; the last takes `state`, which is no longer
+            // needed. Pointers carry over a `Yield` unchanged: resuming, or being dropped while
+            // suspended, continues with the same locals.
+            let successors: SmallVec<[BasicBlock; 2]> =
+                blocks[bb].terminator().successors().collect();
+            if let Some((&last, rest)) = successors.split_last() {
+                for &succ in rest {
+                    propagate(succ, Cow::Borrowed(&state));
+                }
+                propagate(last, Cow::Owned(state));
             }
         }
 
-        segments
+        entry
     }
 
-    fn statement(&self, state: &mut State<'tcx>, statement: &Statement<'tcx>, location: Location) {
+    /// Each reached block's writes, recorded once from its final entry state; `None` for blocks
+    /// never reached. Consumes the entry states, which aren't needed afterwards.
+    fn block_writes(
+        &self,
+        entry: IndexVec<BasicBlock, Option<State<'tcx>>>,
+    ) -> IndexVec<BasicBlock, Option<Writes<'tcx>>> {
+        entry
+            .into_iter_enumerated()
+            .map(|(bb, state)| {
+                let mut state = state?;
+                let mut writes = Writes::default();
+                self.apply_block(&mut state, Some(&mut writes), bb);
+                Some(writes)
+            })
+            .collect()
+    }
+
+    /// Applies the statements and terminator of `bb` to `state`, recording their writes into
+    /// `writes` if given.
+    fn apply_block(
+        &self,
+        state: &mut State<'tcx>,
+        mut writes: Option<&mut Writes<'tcx>>,
+        bb: BasicBlock,
+    ) {
+        let data = &self.body.basic_blocks[bb];
+        for (statement_index, statement) in data.statements.iter().enumerate() {
+            let location = Location { block: bb, statement_index };
+            self.statement(state, writes.as_deref_mut(), statement, location);
+        }
+        self.terminator(state, writes, &data.terminator().kind, self.body.terminator_loc(bb));
+    }
+
+    /// Collects each segment's writes. A block's writes belong to every segment ending at a
+    /// `Yield` or `Return` it reaches without crossing a suspension point, so each segment is
+    /// found by walking backwards from its ending blocks, stopping at `Yield`s: reaching one
+    /// means the segment can start by resuming from it, which writes its resume argument.
+    fn segments(
+        &self,
+        block_writes: &IndexVec<BasicBlock, Option<Writes<'tcx>>>,
+    ) -> FxIndexMap<SegmentEnd, Segment<'tcx>> {
+        let blocks = &self.body.basic_blocks;
+        let predecessors = blocks.predecessors();
+        let reached = |bb: BasicBlock| block_writes[bb].is_some();
+
+        // The blocks each segment ends in: each `Yield` ends its own; every `Return` ends one.
+        let mut ends: FxIndexMap<SegmentEnd, Vec<BasicBlock>> = FxIndexMap::default();
+        for bb in blocks.indices().filter(|&bb| reached(bb)) {
+            let end = match blocks[bb].terminator().kind {
+                TerminatorKind::Yield { .. } => SegmentEnd::Suspend(bb),
+                TerminatorKind::Return => SegmentEnd::Return,
+                _ => continue,
+            };
+            ends.entry(end).or_default().push(bb);
+        }
+        ends.sort_keys();
+
+        ends.into_iter()
+            .map(|(end, mut stack)| {
+                let mut members = DenseBitSet::new_empty(blocks.len());
+                let mut resumed_from = DenseBitSet::new_empty(blocks.len());
+                while let Some(bb) = stack.pop() {
+                    if !members.insert(bb) {
+                        continue;
+                    }
+                    for &pred in predecessors[bb].iter().filter(|&&pred| reached(pred)) {
+                        if let TerminatorKind::Yield { .. } = blocks[pred].terminator().kind {
+                            resumed_from.insert(pred);
+                        } else {
+                            stack.push(pred);
+                        }
+                    }
+                }
+
+                let mut segment = Segment::default();
+                if members.contains(START_BLOCK) {
+                    segment.starts.insert(SegmentStart::Entry);
+                }
+                for bb in blocks.indices() {
+                    if let TerminatorKind::Yield { resume_arg, .. } = blocks[bb].terminator().kind
+                        && resumed_from.contains(bb)
+                    {
+                        segment.starts.insert(SegmentStart::Resume(bb));
+                        let write = Write { place: resume_arg, kind: WriteKind::Resume, via: None };
+                        let location = self.body.terminator_loc(bb);
+                        segment.writes.entry(write).or_default().insert(location);
+                    }
+                    if members.contains(bb)
+                        && let Some(writes) = &block_writes[bb]
+                    {
+                        for (write, locations) in writes {
+                            union(
+                                segment.writes.entry(*write).or_default(),
+                                locations.iter().copied(),
+                            );
+                        }
+                    }
+                }
+                (end, segment)
+            })
+            .collect()
+    }
+
+    /// Applies `statement` to `state`, recording its writes into `writes` if given.
+    fn statement(
+        &self,
+        state: &mut State<'tcx>,
+        writes: Option<&mut Writes<'tcx>>,
+        statement: &Statement<'tcx>,
+        location: Location,
+    ) {
         match &statement.kind {
             StatementKind::Assign(box (place, rvalue)) => {
-                self.store(state, *place, WriteKind::Store, location);
+                self.store(state, writes, *place, WriteKind::Store, location);
                 let value = self.rvalue_targets(state, rvalue);
                 self.assign_targets(state, *place, value);
             }
             StatementKind::SetDiscriminant { place, .. } => {
-                self.store(state, **place, WriteKind::Store, location);
+                self.store(state, writes, **place, WriteKind::Store, location);
             }
             StatementKind::StorageDead(local) => {
-                state.points_to.remove(local);
+                state.points_to.swap_remove(local);
             }
             StatementKind::Intrinsic(box NonDivergingIntrinsic::CopyNonOverlapping(copy)) => {
-                let targets = self.operand_targets(state, &copy.dst);
-                let via = operand_local(&copy.dst);
-                let unknown = via.map(|via| self.pointee_name(via));
-                self.record_targets(state, &targets, WriteKind::Store, via, unknown, location);
+                // Only writes; a constant destination points to no memory of this body.
+                if let Some(writes) = writes
+                    && let Operand::Copy(dst) | Operand::Move(dst) = &copy.dst
+                {
+                    let targets = self.place_value_targets(state, *dst);
+                    let unknown = self.pointee_name(dst.local);
+                    let kind = WriteKind::ThroughRef;
+                    self.record_targets(writes, targets, kind, Some(dst.local), unknown, location);
+                }
             }
             _ => {}
         }
     }
 
-    fn terminator(&self, state: &mut State<'tcx>, kind: &TerminatorKind<'tcx>, location: Location) {
+    /// Applies the terminator `kind` to `state`, recording its writes into `writes` if given.
+    fn terminator(
+        &self,
+        state: &mut State<'tcx>,
+        writes: Option<&mut Writes<'tcx>>,
+        kind: &TerminatorKind<'tcx>,
+        location: Location,
+    ) {
         match kind {
             TerminatorKind::Call { args, destination, .. } => {
-                self.call(state, args, Some(*destination), location);
+                self.call(state, writes, args, Some(*destination), location);
             }
-            TerminatorKind::TailCall { args, .. } => self.call(state, args, None, location),
+            TerminatorKind::TailCall { args, .. } => self.call(state, writes, args, None, location),
             TerminatorKind::Drop { place, .. } => {
-                self.store(state, *place, WriteKind::Drop, location);
+                // Only writes: what any local points to is unchanged.
+                let Some(writes) = writes else { return };
+                self.store(state, Some(&mut *writes), *place, WriteKind::Drop, location);
                 // Drop glue gets `&mut place`, so it may write through references the value holds.
                 let held = self.place_value_targets(state, *place);
-                let reachable = self.reachable(state, &held, true);
-                let unknown = Some(self.pointee_name(place.local));
+                let reachable = self.reachable(state, &held);
+                let unknown = self.pointee_name(place.local);
                 self.record_targets(
-                    state,
-                    &reachable,
+                    writes,
+                    reachable.into_iter().filter(|&target| self.may_write(target)),
                     WriteKind::CallArg,
                     Some(place.local),
                     unknown,
@@ -356,21 +464,48 @@ impl<'a, 'tcx> WriteSetAnalysis<'a, 'tcx> {
     fn call(
         &self,
         state: &mut State<'tcx>,
+        mut writes: Option<&mut Writes<'tcx>>,
         args: &[Spanned<Operand<'tcx>>],
         destination: Option<Place<'tcx>>,
         location: Location,
     ) {
         let mut all = FxIndexSet::default();
         for Spanned { node: arg, .. } in args {
-            let targets = self.operand_targets(state, arg);
-            let reachable = self.reachable(state, &targets, true);
-            let via = operand_local(arg);
-            let unknown = via.map(|via| self.pointee_name(via));
-            self.record_targets(state, &reachable, WriteKind::CallArg, via, unknown, location);
-            all.extend(self.reachable(state, &targets, false));
+            // Constants point to no memory of this body.
+            let (Operand::Copy(arg) | Operand::Move(arg)) = arg else { continue };
+            let targets = self.place_value_targets(state, *arg);
+            let reachable = self.reachable(state, &targets);
+            if let Some(writes) = writes.as_deref_mut() {
+                let unknown = self.pointee_name(arg.local);
+                let writable = reachable.iter().copied().filter(|&target| self.may_write(target));
+                let kind = WriteKind::CallArg;
+                self.record_targets(writes, writable, kind, Some(arg.local), unknown, location);
+            }
+            all.extend(reachable);
+        }
+        // The callee may store any pointer it can reach into writable memory it can reach
+        // (`mem::swap(&mut p, &mut q)`, `slot.insert(&mut x)`), so each such place that can hold
+        // pointers may now also point to anything reachable from the arguments. As in `retype`,
+        // a place holding raw or interior-mutable pointers gets them as `Shared`; that set is
+        // built at most once per call.
+        let mut all_shared = None;
+        for &target in &all {
+            let Target::Place { place, access } = target else { continue };
+            if !access.writable() {
+                continue;
+            }
+            // `pointee_access` is the most permissive access of any pointer in the place's type:
+            // `None` if it holds no pointers, so it can't be given any.
+            let value = match self.pointee_access(place.ty(self.body, self.tcx).ty, Access::Unique)
+            {
+                None => continue,
+                Some(Access::Shared) => &*all_shared.get_or_insert_with(|| as_shared(&all)),
+                Some(_) => &all,
+            };
+            state.points_to.entry(place.local).or_default().extend(value.iter().copied());
         }
         if let Some(destination) = destination {
-            self.store(state, destination, WriteKind::CallResult, location);
+            self.store(state, writes, destination, WriteKind::CallResult, location);
             // The return value may point into anything reachable from the arguments.
             let ty = destination.ty(self.body, self.tcx).ty;
             let value = self.retype(all, ty);
@@ -378,47 +513,43 @@ impl<'a, 'tcx> WriteSetAnalysis<'a, 'tcx> {
         }
     }
 
-    /// Records a write to `place`, resolving any `Deref` in it through the points-to sets.
+    /// Records a write to `place` into `writes`, if given, resolving any `Deref` in it through the
+    /// points-to sets.
     fn store(
         &self,
-        state: &mut State<'tcx>,
+        state: &State<'tcx>,
+        writes: Option<&mut Writes<'tcx>>,
         place: Place<'tcx>,
         kind: WriteKind,
         location: Location,
     ) {
+        let Some(writes) = writes else { return };
         let targets = self.resolve(state, place);
-        let via = place.projection.contains(&ProjectionElem::Deref).then_some(place.local);
-        self.record_targets(state, &targets, kind, via, Some(place), location);
+        let (kind, via) = if place.projection.contains(&ProjectionElem::Deref) {
+            (WriteKind::ThroughRef, Some(place.local))
+        } else {
+            (kind, None)
+        };
+        self.record_targets(writes, targets, kind, via, place, location);
     }
 
-    /// Records a `kind` write to each of `targets`, the memory a write through `via` (if any) may
-    /// land in. A known target reached through `via` by a store is `ThroughRef`; an unknown one is a
-    /// `WriteSite` named `unknown`.
+    /// Records a `kind` write, through `via` if any, to each known target, and a `WriteSite` named
+    /// `unknown` for unknown memory.
     fn record_targets(
         &self,
-        state: &mut State<'tcx>,
-        targets: &FxIndexSet<Target<'tcx>>,
+        writes: &mut Writes<'tcx>,
+        targets: impl IntoIterator<Item = Target<'tcx>>,
         kind: WriteKind,
         via: Option<Local>,
-        unknown: Option<Place<'tcx>>,
+        unknown: Place<'tcx>,
         location: Location,
     ) {
-        for &target in targets {
+        for target in targets {
             let write = match target {
-                Target::Place { place, .. } => {
-                    let kind = if via.is_some() && kind != WriteKind::CallArg {
-                        WriteKind::ThroughRef
-                    } else {
-                        kind
-                    };
-                    Write { place, kind, via }
-                }
-                Target::Unknown { .. } => {
-                    let Some(place) = unknown else { continue };
-                    Write { place, kind: WriteKind::WriteSite, via }
-                }
+                Target::Place { place, .. } => Write { place, kind, via },
+                Target::Unknown { .. } => Write { place: unknown, kind: WriteKind::WriteSite, via },
             };
-            state.record(write, location);
+            writes.entry(write).or_default().insert(location);
         }
     }
 
@@ -450,7 +581,7 @@ impl<'a, 'tcx> WriteSetAnalysis<'a, 'tcx> {
         } else if place.projection.is_empty() {
             // A whole local is overwritten: strong update.
             if value.is_empty() {
-                state.points_to.remove(&place.local);
+                state.points_to.swap_remove(&place.local);
             } else {
                 state.points_to.insert(place.local, value);
             }
@@ -513,16 +644,13 @@ impl<'a, 'tcx> WriteSetAnalysis<'a, 'tcx> {
     /// a call returning one) can be copied out from behind a shared reference, so when `ty` may
     /// hold such pointers, `Unique` targets become `Shared`.
     fn retype(&self, targets: FxIndexSet<Target<'tcx>>, ty: Ty<'tcx>) -> FxIndexSet<Target<'tcx>> {
+        // `pointee_access` is the most permissive access of any pointer in `ty`. It's `Shared`
+        // exactly when `ty` holds a raw pointer or a `&` to interior-mutable data, the pointers
+        // that stay writable however they're reached; otherwise `targets` are kept as they are.
         if self.pointee_access(ty, Access::Unique) != Some(Access::Shared) {
             return targets;
         }
-        targets
-            .into_iter()
-            .map(|target| match target.access() {
-                Access::Unique => target.with_access(Access::Shared),
-                _ => target,
-            })
-            .collect()
+        as_shared(&targets)
     }
 
     /// What the value of an operand may point to.
@@ -573,53 +701,56 @@ impl<'a, 'tcx> WriteSetAnalysis<'a, 'tcx> {
     /// The memory `place` denotes, with every `Deref` resolved through the points-to sets, and
     /// the access the path through those pointers allows.
     fn resolve(&self, state: &State<'tcx>, place: Place<'tcx>) -> FxIndexSet<Target<'tcx>> {
-        // The memory reached so far: bases that the projection since the last `Deref`
-        // (`place.projection[start..]`) still applies to.
+        // The memory reached through the `Deref`s so far, and where the projection after the last
+        // of them starts.
         let mut current = FxIndexSet::from_iter([Target::Place {
             place: Place::from(place.local),
             access: Access::Unique,
         }]);
         let mut start = 0;
-        let derefs =
-            place.projection.iter().enumerate().filter(|&(_, elem)| elem == ProjectionElem::Deref);
-        for (index, _) in derefs {
-            let segment = &place.projection[start..index];
-            let pointer_ty =
-                PlaceRef { local: place.local, projection: &place.projection[..index] }
-                    .ty(self.body, self.tcx)
-                    .ty;
+        let derefs = place.iter_projections().filter(|&(_, elem)| elem == ProjectionElem::Deref);
+        for (pointer, _) in derefs {
+            let pointer_ty = pointer.ty(self.body, self.tcx).ty;
             let mut next = FxIndexSet::default();
             for target in current {
                 match target {
-                    Target::Place { place: base, access } => {
-                        let slot = base.project_deeper(segment, self.tcx);
-                        if state.points_to.contains_key(&slot.local) {
-                            next.extend(self.held(state, slot.local, access));
-                        } else {
-                            // A pointer with no recorded origin (e.g. from a constant): unknown
-                            // memory.
-                            next.insert(self.unknown_behind(pointer_ty, access));
-                        }
+                    // Points-to sets are per local, so only the base's local matters.
+                    Target::Place { place: base, access }
+                        if state.points_to.contains_key(&base.local) =>
+                    {
+                        next.extend(self.held(state, base.local, access));
                     }
-                    // A pointer loaded from memory this body cannot name.
-                    Target::Unknown { access, .. } => {
+                    // A pointer with no recorded origin (e.g. from a constant), or one loaded from
+                    // memory this body cannot name.
+                    Target::Place { access, .. } | Target::Unknown { access, .. } => {
                         next.insert(self.unknown_behind(pointer_ty, access));
                     }
                 }
             }
             current = next;
-            start = index + 1;
+            start = pointer.projection.len() + 1;
         }
 
+        // Points-to sets are per local, so a base may not have the type the last pointer points
+        // to (a pointer cast, or targets of a different field). Only a base of that type takes the
+        // rest of the projection; for any other, the write lands somewhere inside the whole base.
+        // Projecting regardless would build ill-typed places that can grow without bound in loops.
         let rest = &place.projection[start..];
+        let base_ty = PlaceRef { local: place.local, projection: &place.projection[..start] }
+            .ty(self.body, self.tcx)
+            .ty;
         let ty = place.ty(self.body, self.tcx).ty;
         current
             .into_iter()
             .map(|target| match target {
-                Target::Place { place: base, access } => Target::Place {
-                    place: self.canonicalize(base.project_deeper(rest, self.tcx)),
-                    access,
-                },
+                Target::Place { place: base, access } => {
+                    let place = if base.ty(self.body, self.tcx).ty == base_ty {
+                        base.project_deeper(rest, self.tcx)
+                    } else {
+                        base
+                    };
+                    Target::Place { place: self.canonicalize(place), access }
+                }
                 Target::Unknown { access, .. } => Target::Unknown { access, ty },
             })
             .collect()
@@ -651,14 +782,13 @@ impl<'a, 'tcx> WriteSetAnalysis<'a, 'tcx> {
         }
     }
 
-    /// Everything reachable from `targets` by following the pointers stored there, keeping only
-    /// the writable targets when `writable_only`. Read-only targets are still followed: a `&Cell`
-    /// or raw pointer stored behind a `&` can be copied out and written through.
+    /// Everything reachable from `targets` by following the pointers stored there. Read-only
+    /// targets are followed too: a `&Cell` or raw pointer stored behind a `&` can be copied out
+    /// and written through, so callers filter with `may_write` afterwards.
     fn reachable(
         &self,
         state: &State<'tcx>,
         targets: &FxIndexSet<Target<'tcx>>,
-        writable_only: bool,
     ) -> FxIndexSet<Target<'tcx>> {
         let mut seen: FxIndexSet<Target<'tcx>> = FxIndexSet::default();
         let mut stack: Vec<Target<'tcx>> = targets.iter().copied().collect();
@@ -670,7 +800,6 @@ impl<'a, 'tcx> WriteSetAnalysis<'a, 'tcx> {
                 stack.extend(self.held(state, place.local, access));
             }
         }
-        seen.retain(|&target| !writable_only || self.may_write(target));
         seen
     }
 
@@ -702,8 +831,27 @@ impl<'a, 'tcx> WriteSetAnalysis<'a, 'tcx> {
     /// The most any pointer inside a value of type `ty` allows, when the value is reached with
     /// `path`, following pointers nested inside pointees too; `None` if it holds no pointers.
     fn pointee_access(&self, ty: Ty<'tcx>, path: Access) -> Option<Access> {
-        pointee_access(self.tcx, self.typing_env, ty, path, &mut FxHashMap::default(), 0)
+        if let Some(&known) = self.access_cache.borrow().get(&(ty, path)) {
+            return known;
+        }
+        // Each query starts from an empty table, so a cached result never depends on what an
+        // enclosing query assumed about a recursive type.
+        let access =
+            pointee_access(self.tcx, self.typing_env, ty, path, &mut FxHashMap::default(), 0);
+        self.access_cache.borrow_mut().insert((ty, path), access);
+        access
     }
+}
+
+/// `targets` as held by a raw or interior-mutable pointer: `Unique` targets become `Shared`.
+fn as_shared<'tcx>(targets: &FxIndexSet<Target<'tcx>>) -> FxIndexSet<Target<'tcx>> {
+    targets
+        .iter()
+        .map(|&target| match target.access() {
+            Access::Unique => target.with_access(Access::Shared),
+            _ => target,
+        })
+        .collect()
 }
 
 /// The access a pointer of type `ty` grants to what it points to.
@@ -792,25 +940,18 @@ fn contains_coroutine<'tcx>(ty: Ty<'tcx>) -> bool {
     })
 }
 
-fn operand_local<'tcx>(operand: &Operand<'tcx>) -> Option<Local> {
-    match operand {
-        Operand::Copy(place) | Operand::Move(place) => Some(place.local),
-        Operand::Constant(_) | Operand::RuntimeChecks(_) => None,
-    }
-}
-
 fn print_write_sets<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &Body<'tcx>,
-    segments: &FxIndexMap<SegmentEnd, State<'tcx>>,
+    segments: &FxIndexMap<SegmentEnd, Segment<'tcx>>,
     coroutine: Option<&LivenessInfo>,
 ) {
-    let names: FxHashMap<Local, String> = body
+    let names: FxHashMap<Local, Symbol> = body
         .var_debug_info
         .iter()
         .filter_map(|info| match info.value {
             VarDebugInfoContents::Place(place) if place.projection.is_empty() => {
-                Some((place.local, info.name.to_string()))
+                Some((place.local, info.name))
             }
             _ => None,
         })
@@ -820,23 +961,32 @@ fn print_write_sets<'tcx>(
 
     eprintln!("=== write set: {} ===", tcx.def_path_str(body.source.def_id()));
 
-    let mut ends: Vec<SegmentEnd> = segments.keys().copied().collect();
-    ends.sort();
+    // `StateTransform` numbers suspension points in block order.
+    let suspension_index = |yield_block: BasicBlock| {
+        body.basic_blocks
+            .iter_enumerated()
+            .filter(|&(bb, data)| {
+                bb < yield_block && matches!(data.terminator().kind, TerminatorKind::Yield { .. })
+            })
+            .count()
+    };
 
-    for end in ends {
-        let segment = &segments[&end];
-        let mut starts: Vec<SegmentStart> = segment.starts.iter().copied().collect();
-        starts.sort();
-        let starts = starts
+    for (&end, segment) in segments {
+        let suspension = match end {
+            SegmentEnd::Suspend(bb) => Some(suspension_index(bb)),
+            SegmentEnd::Return => None,
+        };
+        let starts = segment
+            .starts
             .iter()
+            .sorted()
             .map(|start| match start {
                 SegmentStart::Entry => "entry".to_string(),
-                SegmentStart::Resume(index) => format!("suspension {index}"),
+                SegmentStart::Resume(bb) => format!("suspension {}", suspension_index(*bb)),
             })
-            .collect::<Vec<_>>()
             .join(" | ");
-        let end_text = match end {
-            SegmentEnd::Suspend(index) => {
+        let end_text = match suspension {
+            Some(index) => {
                 let at = coroutine
                     .and_then(|info| info.source_info_at_suspension_points.get(index))
                     .map(|source_info| source_map.span_to_diagnostic_string(source_info.span))
@@ -846,13 +996,13 @@ fn print_write_sets<'tcx>(
                     ty::CoroutineArgs::RESERVED_VARIANTS + index
                 )
             }
-            SegmentEnd::Return => "return".to_string(),
+            None => "return".to_string(),
         };
         eprintln!("segment: {starts} → {end_text}");
 
         for (write, locations) in &segment.writes {
             let root = write.place.local;
-            let name = names.get(&root).map(String::as_str).unwrap_or("");
+            let name = names.get(&root).map_or("", |name| name.as_str());
             let ty = write.place.ty(body, tcx).ty;
             let size = if contains_coroutine(ty) {
                 format!("size_of::<{ty}>()")
@@ -872,20 +1022,20 @@ fn print_write_sets<'tcx>(
                 WriteKind::Resume => "resume arg",
             };
             let via = write.via.map(|local| format!(" via {local:?}")).unwrap_or_default();
-            let status = status(body, coroutine, end, write);
-            let sites: Vec<String> = locations
+            let status = status(body, coroutine, suspension, write);
+            let sites = locations
                 .iter()
                 .take(4)
                 .map(|location| format!("{location:?}"))
                 .chain((locations.len() > 4).then(|| "…".to_string()))
-                .collect();
+                .join(", ");
             eprintln!(
                 "  {:<14} {:<28} {:<12} {:>12}{via}  [{}] → {status}",
                 name,
                 format!("{:?}", write.place),
                 kind,
                 size,
-                sites.join(", "),
+                sites,
             );
         }
         if coroutine.is_some() {
@@ -898,32 +1048,32 @@ fn print_write_sets<'tcx>(
 fn status<'tcx>(
     body: &Body<'tcx>,
     coroutine: Option<&LivenessInfo>,
-    end: SegmentEnd,
+    suspension: Option<usize>,
     write: &Write<'tcx>,
-) -> String {
+) -> Cow<'static, str> {
     let local = write.place.local;
     if write.kind == WriteKind::WriteSite {
-        "address at runtime".to_string()
+        "address at runtime".into()
     } else if local == RETURN_PLACE {
-        "return place".to_string()
+        "return place".into()
     } else if let Some(info) = coroutine {
         if body.args_iter().next() == Some(local) {
-            "coroutine state (captured upvars)".to_string()
+            "coroutine state (captured upvars)".into()
         } else if let Some(saved) = info.saved_locals.get(local) {
-            match end {
-                SegmentEnd::Suspend(index) => {
+            match suspension {
+                Some(index) => {
                     let live = info.live_locals_at_suspension_points[index].contains(saved);
                     let live = if live { "live here" } else { "not live here" };
-                    format!("field _s{}, {live}", saved.as_usize())
+                    format!("field _s{}, {live}", saved.as_usize()).into()
                 }
-                SegmentEnd::Return => format!("field _s{}", saved.as_usize()),
+                None => format!("field _s{}", saved.as_usize()).into(),
             }
         } else {
-            "not saved".to_string()
+            "not saved".into()
         }
     } else if body.args_iter().any(|arg| arg == local) {
-        "argument".to_string()
+        "argument".into()
     } else {
-        "local".to_string()
+        "local".into()
     }
 }
