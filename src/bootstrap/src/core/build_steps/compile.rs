@@ -645,6 +645,12 @@ pub fn std_cargo(
         if crates.is_empty() {
             cargo.args(["-p", "alloc"]);
         }
+
+        if target.contains("rad") {
+            cargo.args(["-p", "rad_protected"]);
+            cargo.rustflag("-Zrad-protected");
+        }
+
         cargo
             .arg("--manifest-path")
             .arg(builder.src.join("library/alloc/Cargo.toml"))
