@@ -4,6 +4,13 @@ use super::shared_memory::SharedMemory;
 
 pub(super) static ROLE: Mutex<Option<Role>> = Mutex::new(None);
 
+
+#[rustc_diagnostic_item = "checkpoint_buffer_size"]
+const BUFFER_SIZE: usize = 2048;
+
+// Shared SRAM buffer
+static mut CHECKPOINT_BUFFER: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+
 #[derive(Debug)]
 pub(super) enum Role {
     Parent(Parent),

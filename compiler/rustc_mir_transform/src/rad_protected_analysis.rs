@@ -14,6 +14,7 @@ use super::rad_protected_liveness_analysis::{CheckpointAnalysis, LiveLocals};
 use rustc_span::{sym, Span, source_map::Spanned};
 use rustc_index::IndexVec;
 use rustc_middle::mir::interpret::Scalar;
+use rustc_abi::Size;
 
 pub(super) struct RadProtectedAnalysis;
 
@@ -50,9 +51,8 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
             eprintln!("Successfully injected checkpoint call at {:?}", bb_idx);
         }
 
-        inject_payload_size_arg(tcx, body, max_payload_size)
-            .expect("Failed to find a triplicate_process call to inject payload size");
-        eprintln!("Checkpoint injection complete with payload size of {} bytes", max_payload_size);
+        validate_payload_size(tcx, max_payload_size).unwrap();
+        eprintln!("Validated payload size of {} bytes", max_payload_size);
 
         eprintln!("================================");
         
@@ -582,25 +582,27 @@ fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: 
     payload_size
 }
 
-fn inject_payload_size_arg<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, max_payload_size: u64) -> Option<()> {
+fn validate_payload_size<'tcx>(tcx: TyCtxt<'tcx>, max_payload_size: u64) -> Result<(), String> {
+    let Some(checkpoint_buffer_size) = get_checkpoint_buffer_size(tcx) else {
+        return Err("Failed to get checkpoint buffer size from runtime".into());
+    };
 
-    for bb_data in body.basic_blocks.as_mut().iter_mut() {
-        if CheckpointAnalysis::is_call_to(tcx, bb_data, sym::triplicate_process) {
-            let span = bb_data.terminator().source_info.span;
-            let size_operand = Operand::const_from_scalar(
-                tcx,
-                tcx.types.usize,
-                Scalar::from_target_usize(max_payload_size, &tcx),
-                span,
-            );
-
-            let (_, args, _) = call_terminator_parts_mut(&mut bb_data.terminator_mut().kind).unwrap();
-            *args = Box::new([Spanned { node: size_operand, span }]);
-            return Some(());
-        }
+    if max_payload_size > checkpoint_buffer_size {
+        return Err(format!(
+            "Payload size of {} exceeds checkpoint buffer size of {}", 
+            max_payload_size, 
+            checkpoint_buffer_size
+        ));
     }
+    Ok(())
+}
 
-    None
+fn get_checkpoint_buffer_size<'tcx>(tcx: TyCtxt<'tcx>) -> Option<u64> {
+    let def_id = tcx.get_diagnostic_item(sym::checkpoint_buffer_size)?;
+
+    let val = tcx.const_eval_poly(def_id).ok()?;
+    let bits = val.try_to_bits(Size::from_bits(64))?;
+    Some(bits as u64)
 }
 
 fn call_terminator_parts_mut<'a, 'tcx>(kind: &'a mut TerminatorKind<'tcx>) -> Option<(&'a mut Operand<'tcx>, &'a mut Box<[Spanned<Operand<'tcx>>]>, &'a mut Span)> {
