@@ -14,7 +14,7 @@ pub(crate) fn validate_attr(
         return vec![item];
     };
 
-    if opts.triplicate_unsafe() {
+    if opts.unguarded_unsafe() {
         let valid = match &mut item {
             Annotatable::Expr(expr)
                 if matches!(&expr.kind, ast::ExprKind::Block(block, _)
@@ -22,7 +22,7 @@ pub(crate) fn validate_attr(
                 ) => {
                     expr.attrs.push(cx.attr_nested_word(
                         sym::rad_protected,
-                        sym::triplicate_unsafe,
+                        sym::unguarded_unsafe,
                         DUMMY_SP,
                     ));
                     true
@@ -33,7 +33,7 @@ pub(crate) fn validate_attr(
         if !valid {
             cx.dcx().span_err(
                 span,
-                "`#[rad_protected(triplicate_unsafe)]` can only be applied to `unsafe` blocks",
+                "`#[rad_protected(unguarded_unsafe)]` can only be applied to `unsafe` blocks",
             );
         }
     } 

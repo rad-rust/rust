@@ -102,7 +102,7 @@ fn is_skip_attr(meta: ast::MetaItem) -> bool {
     };
 
     items.iter().any(|item| {
-        matches!(item, MetaItemInner::MetaItem(mi) if mi.has_name(sym::triplicate_unsafe))
+        matches!(item, MetaItemInner::MetaItem(mi) if mi.has_name(sym::unguarded_unsafe))
     })
 }
 

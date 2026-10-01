@@ -2046,7 +2046,7 @@ symbols! {
         transparent,
         transparent_enums,
         transparent_unions,
-        triplicate_unsafe,
+        unguarded_unsafe,
         triplicate_process,
         trivial_bounds,
         trivial_clone,
