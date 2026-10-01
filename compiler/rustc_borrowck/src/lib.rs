@@ -455,6 +455,13 @@ fn borrowck_check_region_constraints<'diag, 'tcx>(
         &borrow_set,
         polonius_context.as_ref(),
     );
+    polonius::dump_rad_points_to(
+        infcx.tcx,
+        body,
+        &regioncx,
+        &borrow_set,
+        polonius_context.as_ref(),
+    );
 
     // We also have a `#[rustc_regions]` annotation that causes us to dump
     // information.

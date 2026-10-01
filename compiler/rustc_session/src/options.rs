@@ -2813,6 +2813,9 @@ options! {
         "name of the profiler runtime crate to automatically inject (default: `profiler_builtins`)"),
     query_dep_graph: bool = (false, parse_bool, [UNTRACKED],
         "enable queries of the dependency graph for regression testing (default: no)"),
+    rad_polonius_points_to: bool = (false, parse_bool, [UNTRACKED],
+        "print, at each call and suspension point, what each local may point to according to \
+        Polonius (default: no)"),
     randomize_layout: bool = (false, parse_bool, [TRACKED],
         "randomize the layout of types (default: no)"),
     reg_struct_return: bool = (false, parse_bool, [TRACKED] { TARGET_MODIFIER: RegStructReturn },
