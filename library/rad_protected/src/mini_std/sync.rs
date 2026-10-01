@@ -1,8 +1,8 @@
-use libc;
+// TODO: If the target architecture supports multithreading, implement the Mutex below (otherwise remove)
+
 use core::{cell::UnsafeCell, ops::{Deref, DerefMut}};
 
 pub struct Mutex<T> {
-    lock: libc::pthread_mutex_t,
     data: UnsafeCell<T>,
 }
 
@@ -18,17 +18,11 @@ type LockResult<T> = Result<T, i32>;
 impl<T> Mutex<T> {
     pub const fn new(data: T) -> Self {
         Self {
-            lock: libc::PTHREAD_MUTEX_INITIALIZER,
             data: UnsafeCell::new(data),
         }
     }
 
     pub fn lock(&self) -> LockResult<MutexGuard<'_, T>> {
-        let res = unsafe { libc::pthread_mutex_lock(&self.lock as *const _ as *mut _) };
-
-        if res != 0 {
-            return Err(res);
-        }
         Ok(MutexGuard { mutex: self })
     }
 }
@@ -48,15 +42,13 @@ impl<T> DerefMut for MutexGuard<'_, T> {
 }
 
 impl<T> Drop for MutexGuard<'_, T> {
-    fn drop(&mut self) {
-        unsafe { libc::pthread_mutex_unlock(&self.mutex.lock as *const _ as *mut _); }
+    fn drop(&mut self) { 
+
     }
 }
 
 impl<T> Drop for Mutex<T> {
     fn drop(&mut self) {
-        unsafe {
-            libc::pthread_mutex_destroy(&mut self.lock);
-        }
+        
     }
 }

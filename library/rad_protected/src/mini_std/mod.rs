@@ -14,7 +14,5 @@
 //! 
 //! Be careful when using these APIs, as they may not be thread-safe outside of their intended usage.
 
-pub mod io;
-pub mod sync;
-pub mod fs;
 pub mod ipc;
+pub mod sync;
