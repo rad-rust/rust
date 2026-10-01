@@ -13,48 +13,9 @@ impl Runtime {
     /// Triplicate the running process over the current rad_protected function
     /// Fork the running process and copy its memory to create 3 identical processes
     #[stable(feature = "rad_protected", since = "1.95.0")]
-    #[rustc_diagnostic_item = "triplicate_process"]
-    pub fn triplicate_process(payload_size: usize) -> Result<ProcessGuard, ()> {
-        if ROLE.lock().unwrap().as_ref().is_some() {
-            return Err(());
-        }
-
-        let Ok(shared_memory) = SharedMemory::open(payload_size) else {
-            return Err(());
-        };
-
-        let link1 = match fork_copy() {
-            Some(ForkOutcome::Parent(link1)) => link1,
-            Some(ForkOutcome::Child) => {
-                ROLE.lock().unwrap().replace(Role::Child(Child::new(shared_memory, true)));
-                return Ok(ProcessGuard{});
-            }
-            None => { 
-                shared_memory.close();
-                return Err(());
-            }
-        };
-
-        let link2 = match fork_copy() {
-            Some(ForkOutcome::Parent(link2)) => link2,
-            Some(ForkOutcome::Child) => {
-                ROLE.lock().unwrap().replace(Role::Child(Child::new(shared_memory, false)));
-                return Ok(ProcessGuard{});
-            }
-            None => {
-                shared_memory.close();
-                link1.kill_child();
-                return Err(());
-            }
-        };
-
-        ROLE.lock().unwrap().replace(Role::Parent(Parent::new(
-            shared_memory,
-            link1,
-            link2,
-        )));
-
-        Ok(ProcessGuard{})
+    #[rustc_diagnostic_item = "initialize_runtime"]
+    pub fn initialize_runtime() {
+        todo!();
     }
 
     /// Enter a critical (unsafe) section of code, allowing only a single process through

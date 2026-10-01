@@ -1,15 +1,16 @@
 //! This pass performs an analysis to determine reference, raw pointer, and unsafe function call accesses that are protected by `#[rad_protected]`
 
 use rustc_data_structures::fx::{FxHashSet, FxIndexMap};
-use rustc_hir::{find_attr, Mutability};
+use rustc_hir::Mutability;
 use rustc_middle::mir::{
     Body, Local, LocalKind, Operand, Place, RETURN_PLACE, Rvalue, StatementKind, TerminatorKind,
     BasicBlock, SourceInfo, LocalDecl, Statement, CastKind, AggregateKind, ProjectionElem,
-    RawPtrKind, CoercionSource, BorrowKind,
+    RawPtrKind, CoercionSource, BorrowKind, START_BLOCK, BasicBlockData, Terminator, UnwindAction,
+    CallSource
 };
 use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{self, Ty, TyCtxt};
+use rustc_middle::ty::{self, Ty, TyCtxt, InstanceKind};
 use super::rad_protected_liveness_analysis::{CheckpointAnalysis, LiveLocals};
 use rustc_span::{sym, Span, source_map::Spanned};
 use rustc_index::IndexVec;
@@ -30,6 +31,13 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
 
         if !def_id.is_local() {
             return;
+        }
+
+        if let Some((entry, _)) = tcx.entry_fn(()) {
+            if def_id == entry && matches!(body.source.instance, InstanceKind::Item(_)) {
+                // TODO: Close call or guard drop is not handled yet. Add if necessary
+                inject_init_call(tcx, body);
+            }
         }
 
         let checkpoint_analysis = CheckpointAnalysis::analyze(tcx, body);
@@ -455,6 +463,7 @@ fn resolve_pointer_source<'tcx>(
     }
 }
 
+// TODO: handle pointers and references in checkpointed types
 fn inject_checkpoint_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, live: LiveLocals, next: BasicBlock) -> u64 {
     let checkpoint_def_id = tcx.get_diagnostic_item(sym::checkpoint).unwrap();
     let source_info = SourceInfo::outermost(body.span);
@@ -611,4 +620,31 @@ fn call_terminator_parts_mut<'a, 'tcx>(kind: &'a mut TerminatorKind<'tcx>) -> Op
         | TerminatorKind::TailCall { func, args, fn_span, .. } => Some((func, args, fn_span)),
         _ => None,
     }
+}
+
+fn inject_init_call<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+    let init_def_id = tcx.get_diagnostic_item(sym::initialize_runtime).unwrap();
+    let span = body.span;
+    let source_info = SourceInfo::outermost(span);
+
+    let dest = body.local_decls.push(LocalDecl::new(tcx.types.unit, span));
+
+    let old_block = std::mem::replace(
+        &mut body.basic_blocks.as_mut()[START_BLOCK],
+        BasicBlockData::new(None, false),
+    );
+    let target = body.basic_blocks.as_mut().push(old_block);
+
+    body.basic_blocks.as_mut()[START_BLOCK].terminator = Some(Terminator {
+        source_info,
+        kind: TerminatorKind::Call {
+            func: Operand::function_handle(tcx, init_def_id, [], span),
+            args: Box::new([]),
+            destination: Place::from(dest),
+            target: Some(target),
+            unwind: UnwindAction::Continue,
+            call_source: CallSource::Misc,
+            fn_span: span,
+        },
+    });
 }

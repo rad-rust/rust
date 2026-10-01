@@ -1096,6 +1096,7 @@ symbols! {
         infer_static_outlives_requirements,
         inherent_associated_types,
         initial,
+        initialize_runtime,
         inlateout,
         inline,
         inline_const,
