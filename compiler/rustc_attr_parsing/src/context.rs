@@ -47,7 +47,6 @@ use crate::attributes::path::PathParser as PathAttributeParser;
 use crate::attributes::pin_v2::*;
 use crate::attributes::proc_macro_attrs::*;
 use crate::attributes::prototype::*;
-use crate::attributes::rad_protected::*;
 use crate::attributes::repr::*;
 use crate::attributes::rustc_allocator::*;
 use crate::attributes::rustc_dump::*;
@@ -268,7 +267,6 @@ attribute_parsers!(
         Single<WithoutArgs<ProcMacroAttributeParser>>,
         Single<WithoutArgs<ProcMacroParser>>,
         Single<WithoutArgs<ProfilerRuntimeParser>>,
-        Single<WithoutArgs<RadProtectedParser>>,
         Single<WithoutArgs<RustcAllocatorParser>>,
         Single<WithoutArgs<RustcAllocatorZeroedParser>>,
         Single<WithoutArgs<RustcAllowIncoherentImplParser>>,

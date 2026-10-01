@@ -119,7 +119,7 @@ pub fn register_builtin_macros(resolver: &mut dyn ResolverExpand) {
         eii_declaration: eii::eii_declaration,
         eii_shared_macro: eii::eii_shared_macro,
         global_allocator: global_allocator::expand,
-        rad_protected: rad_protected::triplicate,
+        rad_protected: rad_protected::validate_attr,
         test: test::expand_test,
         test_case: test::expand_test_case,
         unsafe_eii: eii::unsafe_eii,

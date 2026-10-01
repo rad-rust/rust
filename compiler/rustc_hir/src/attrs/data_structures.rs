@@ -1234,9 +1234,6 @@ pub enum AttributeKind {
     /// Represents `#[profiler_runtime]`
     ProfilerRuntime,
 
-    /// Represents `#[rad_protected_mir]`
-    RadProtected(Span),
-
     /// Represents [`#[recursion_limit]`](https://doc.rust-lang.org/reference/attributes/limits.html#the-recursion_limit-attribute)
     RecursionLimit {
         attr_span: Span,

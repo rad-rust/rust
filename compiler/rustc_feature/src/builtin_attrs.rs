@@ -903,13 +903,6 @@ pub static BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
         EncodeCrossCrate::Yes, pin_ergonomics, experimental!(pin_v2),
     ),
 
-    // Radshield MIR pass protection attribute (ungated for easy testing)
-    // This attribute is used internally by rad_protected, and is not intended for use by the user
-    ungated!(
-        rad_protected_mir, Normal, template!(Word), WarnFollowing,
-        EncodeCrossCrate::No,
-    ),
-
     // ==========================================================================
     // Internal attributes: Stability, deprecation, and unsafe:
     // ==========================================================================

@@ -2,13 +2,12 @@ use rustc_hir::def_id::LocalDefId;
 use rustc_middle::mir::{TerminatorKind, Operand, Place, UnwindAction, CallSource, BasicBlock};
 use rustc_middle::ty::TyCtxt;
 use rustc_span::{sym, Span};
-use rustc_hir::find_attr;
 
 use super::Builder;
 
 impl<'a, 'tcx> Builder<'a, 'tcx> {
     pub(super) fn inject_checkpoint_marker(&mut self, block: BasicBlock, span: Span) -> BasicBlock {
-        if !Self::has_rad_protected(self.tcx, self.def_id) {
+        if Self::skip_marker(self.tcx, self.def_id) {
             return block;
         }
 
@@ -38,7 +37,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         next
     }
 
-    fn has_rad_protected(tcx: TyCtxt<'_>, def_id: LocalDefId) -> bool {
-        find_attr!(tcx, def_id, RadProtected(_))
+    fn skip_marker(tcx: TyCtxt<'_>, def_id: LocalDefId) -> bool {
+        return !tcx.sess.opts.unstable_opts.rad_protected ||
+            tcx.hir_body_const_context(def_id).is_some()
     }
 }

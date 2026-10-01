@@ -18,8 +18,8 @@ use rustc_middle::mir::interpret::Scalar;
 pub(super) struct RadProtectedAnalysis;
 
 impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
-    fn is_enabled(&self, _sess: &rustc_session::Session) -> bool {
-        true
+    fn is_enabled(&self, sess: &rustc_session::Session) -> bool {
+        sess.opts.unstable_opts.rad_protected
     }
 
     fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
@@ -27,7 +27,7 @@ impl<'tcx> crate::MirPass<'tcx> for RadProtectedAnalysis {
 
         // print_calls_to_protected_functions(tcx, body);
 
-        if !find_attr!(tcx, def_id, RadProtected(_)) {
+        if !def_id.is_local() {
             return;
         }
 
@@ -117,9 +117,9 @@ fn _print_calls_to_protected_functions<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx
             continue;
         };
 
-        if !find_attr!(tcx, callee_def_id, RadProtected(_)) {
-            continue;
-        }
+        // if !find_attr!(tcx, callee_def_id, RadProtected(_)) {
+        //     continue;
+        // }
 
         with_no_trimmed_paths!({
             let caller_def_id = body.source.def_id();

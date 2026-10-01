@@ -6,7 +6,7 @@ use thin_vec::{ThinVec, thin_vec};
 use rustc_ast::MetaItemInner;
 
 pub fn patch_unsafe_blocks(cx: &mut ExtCtxt<'_>, krate: &mut ast::Crate) {
-    if cx.sess.opts.unstable_opts.force_unstable_if_unmarked {
+    if !cx.sess.opts.unstable_opts.rad_protected {
         return;
     }
     let mut visitor = UnsafeBlockRewriter { cx };
@@ -93,7 +93,7 @@ fn skip_patch(attrs: &mut ThinVec<ast::Attribute>) -> bool {
 }
 
 fn is_skip_attr(meta: ast::MetaItem) -> bool {
-    if !meta.has_name(sym::rad_protected_mir) {
+    if !meta.has_name(sym::rad_protected) {
         return false;
     }
 
