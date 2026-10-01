@@ -1,61 +1,39 @@
-use super::fork::{fork_copy, ForkOutcome};
-use super::role::{ROLE, Role, Parent, Child};
-use super::shared_memory::SharedMemory;
-use core::ptr;
-
+use super::mini_std::hal::multicore_launch_core1;
+use super::role::ROLE;
 /// Runtime for rad_protected
 #[stable(feature = "rad_protected", since = "1.95.0")]
 #[derive(Debug)]
 pub struct Runtime;
 
 impl Runtime {
-    
-    /// Triplicate the running process over the current rad_protected function
-    /// Fork the running process and copy its memory to create 3 identical processes
-    #[stable(feature = "rad_protected", since = "1.95.0")]
-    #[rustc_diagnostic_item = "initialize_runtime"]
+    #[stable(feature = "initialize_runtime", since = "1.95.0")]
     pub fn initialize_runtime() {
-        todo!();
+        multicore_launch_core1();
+        // TODO: All other initialization here (e.g. init PSRAM)
     }
 
-    /// Enter a critical (unsafe) section of code, allowing only a single process through
-    /// Syncs the three processes. Returns `true` for the one leader (parent) process
+    /// Enter a critical (unsafe) section of code, allowing only a single core through
+    /// Syncs the cores. Returns `true` for the one leader (parent) core
     #[stable(feature = "rad_protected", since = "1.95.0")]
     pub fn enter_critical_section() -> bool {
-        let mut guard = ROLE.lock().unwrap();
-        if let Some(role) = guard.as_mut() {
-            return role.ctx_mut().enter_critical_section();
-        }
-        true
+        return ROLE.get_mut().enter_critical_section();
     }
 
     /// Exit a critical (unsafe) section of code
-    /// Syncs the three processes
+    /// Syncs the three cores
     #[stable(feature = "rad_protected", since = "1.95.0")]
     pub fn exit_critical_section() {
-        let mut guard = ROLE.lock().unwrap();
-        if let Some(role) = guard.as_mut() {
-            return role.ctx_mut().exit_critical_section();
-        }
+        return ROLE.get_mut().exit_critical_section();
     }
 
-    /// Close and clean up the triplicated processes at the end of rad_protected execution
+    /// Close and clean resources at the end of rad_protected execution
     #[stable(feature = "rad_protected", since = "1.95.0")]
     pub fn close() {
-        let mut guard = ROLE.lock().unwrap();
-        if let Some(role) = guard.as_ref() {
-            role.ctx().sync();
-            if let Role::Parent(parent) = role {
-                parent.kill_children();
-                parent.close_shared_mem();
-            } else {
-                unsafe { libc::pause(); }
-            }
-        }
-        guard.take();
+        // TODO: Do any other closing/cleaning operations here
+        ROLE.get().sync();
     }
 
-    // Checkpoint given locals via a majority vote over the triplicated threads
+    // Checkpoint given locals via a majority vote over the cores
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "checkpoint"]
     pub fn checkpoint(locals: &[(*mut u8, usize)]) {
@@ -63,49 +41,7 @@ impl Runtime {
             return;
         }
 
-        let mut guard = ROLE.lock().unwrap();
-
-        let Some(role) = guard.as_mut() else {
-            return;
-        };
-
-        let mut slot = role.ctx().this_slot();
-
-        for &(local_ptr, size) in locals {
-            unsafe {
-                ptr::copy_nonoverlapping(local_ptr, slot, size);
-                slot = slot.add(size);
-            }
-        }
-
-        role.ctx().sync();
-
-        let a = role.ctx().get_slot(0);
-        let b = role.ctx().get_slot(1);
-        let c = role.ctx().get_slot(2);
-
-        let mut offset = 0;
-        for &(local_ptr, size) in locals {
-            unsafe {
-                for i in 0..size {
-                    let voted = Self::bitwise_majority_vote(a, b, c, offset + i);
-                    local_ptr.add(i).write(voted);
-                }
-            }
-            offset += size;
-        }
-
-        role.ctx().sync();
-    }
-
-    fn bitwise_majority_vote(a: *mut u8, b: *mut u8, c: *mut u8, offset: usize) -> u8 {
-        unsafe {
-            let a_byte = a.add(offset).read();
-            let b_byte = b.add(offset).read();
-            let c_byte = c.add(offset).read();
-
-            (a_byte & b_byte) | (a_byte & c_byte) | (b_byte & c_byte)
-        }
+        ROLE.get_mut().checkpoint(locals);
     }
 
     // Internal checkpoint marker inserted during MIR building
@@ -116,15 +52,18 @@ impl Runtime {
     }
 }
 
-/// Guard to properly drop processes when done with the rad_protected function
+// TODO: Use this CoreGuard if calling close is necessary from all paths (right now Runtime::close() just syncs)
+/*
+/// Guard to properly close resources when done with the rad_protected execution
 #[stable(feature = "rad_protected", since = "1.95.0")]
 #[derive(Debug)]
-pub struct ProcessGuard;
+pub struct CoreGuard;
 
-/// Drop method for `ProcessGuard`, close the child processes
+/// Drop method for `CoreGuard`, close the child processes
 #[stable(feature = "rad_protected", since = "1.95.0")]
-impl Drop for ProcessGuard {
+impl Drop for CoreGuard {
     fn drop(&mut self) {
         Runtime::close();
     }
 }
+*/

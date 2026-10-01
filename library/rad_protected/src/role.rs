@@ -1,9 +1,21 @@
-use super::mini_std::sync::Mutex;
-use super::libc_helpers::{kill, waitpid, Pid};
-use super::shared_memory::SharedMemory;
+use super::mini_std::hal::{fifo_push_blocking, fifo_pop_blocking};
+use super::mini_std::ipc::CoreLocal;
+use super::checkpoint::Checkpoint;
+use core::{ptr, slice};
 
-pub(super) static ROLE: Mutex<Option<Role>> = Mutex::new(None);
+const MSG_BARRIER: u32 = 0x1;
+const MSG_ACK: u32 = 0x2;
+const CHECKPOINT_MSG: u32 = 0x3;
+const VERDICT_OK: u32 = 0x4;
+const VERDICT_BAD: u32 = 0x5;
 
+// Each core gets a unique role
+// TODO: Wrap with Mutex if in a multithreaded environment
+pub(super) static ROLE: CoreLocal<Role> = 
+    CoreLocal::new(
+        Role::Parent(Parent { crit_depth: 0 }),
+        Role::Child,
+    );
 
 #[rustc_diagnostic_item = "checkpoint_buffer_size"]
 const BUFFER_SIZE: usize = 2048;
@@ -14,124 +26,117 @@ static mut CHECKPOINT_BUFFER: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
 #[derive(Debug)]
 pub(super) enum Role {
     Parent(Parent),
-    Child(Child),
+    Child,
+}
+
+impl Role {
+    pub(super) fn enter_critical_section(&mut self) -> bool {
+        match self {
+            Role::Parent(parent) => {
+                if parent.crit_depth == 0 {
+                    Parent::sync();
+                }
+                parent.crit_depth += 1;
+                return true;
+            },
+            Role::Child => {
+                Child::sync();
+                return false;
+            }
+        }
+    }
+
+    pub(super) fn exit_critical_section(&mut self) {
+        match self {
+            Role::Parent(parent) => {
+                if parent.crit_depth > 0 {
+                    parent.crit_depth -= 1;
+                }
+                if parent.crit_depth == 0 {
+                    Parent::sync();
+                }
+            },
+            Role::Child => {
+                Child::sync();
+            }
+        }
+    }
+
+    pub(super) fn sync(&self) {
+        match self {
+            Role::Parent(_) => Parent::sync(),
+            Role::Child => Child::sync(),
+        }
+    }
+
+    pub(super) fn checkpoint(&self, locals: &[(*mut u8, usize)]) {
+        if self.compare_locals(locals) {
+            Checkpoint::snapshot();
+        } else {
+            Checkpoint::rollback();
+        }
+    }
+
+    fn compare_locals(&self, locals: &[(*mut u8, usize)]) -> bool {
+        match self {
+            Role::Parent(_) => {
+                while fifo_pop_blocking() != CHECKPOINT_MSG {}
+
+                let mut offset = 0usize;
+
+                for &(local_ptr, size) in locals {
+                    let local = unsafe { slice::from_raw_parts(local_ptr.cast_const(), size) };
+
+                    if unsafe { local != &CHECKPOINT_BUFFER[offset..offset + size] } {
+                        fifo_push_blocking(VERDICT_BAD);
+                        return false;
+                    }
+
+                    offset += size;
+                }
+
+                fifo_push_blocking(VERDICT_OK);
+                true
+            },
+            Role::Child => {
+                let mut offset = 0usize;
+
+                for &(local_ptr, size) in locals {
+                    unsafe {
+                        ptr::copy_nonoverlapping(
+                            local_ptr.cast_const(),
+                            CHECKPOINT_BUFFER.as_mut_ptr().add(offset),
+                            size,
+                        );
+                    }
+
+                    offset += size;
+                }
+
+                fifo_push_blocking(CHECKPOINT_MSG);
+                fifo_pop_blocking() == VERDICT_OK
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct Parent {
-    shared_mem_ctx: SharedMemoryContext,
-    child1: ChildLink,
-    child2: ChildLink,
+    crit_depth: u32,
 }
 
 impl Parent {
-    pub(super) fn new(shared_memory: SharedMemory, child1: ChildLink, child2: ChildLink) -> Self {
-        Self {
-            shared_mem_ctx: SharedMemoryContext::new(shared_memory, 0),
-            child1,
-            child2
-        }
-    }
-
-    pub(super) fn kill_children(&self) {
-        self.child1.kill_child();
-        self.child2.kill_child();
-    }
-
-    pub(super) fn close_shared_mem(&self) {
-        self.shared_mem_ctx.shared_memory.close();
+    fn sync() {
+        while fifo_pop_blocking() != MSG_BARRIER { }
+        fifo_push_blocking(MSG_ACK);
     }
 }
 
-#[derive(Debug)]
-pub struct Child {
-    shared_mem_ctx: SharedMemoryContext,
-}
+pub struct Child;
 
 impl Child {
-    pub(super) fn new(shared_memory: SharedMemory, first: bool) -> Self {
-        Self {
-            shared_mem_ctx: SharedMemoryContext::new(shared_memory, if first { 1 } else { 2 }), 
-        }
-    }
-}
-
-#[derive(Debug)]
-pub(super) struct SharedMemoryContext {
-    shared_memory: SharedMemory, 
-    leader_depth: u32,
-    index: u32,
-}
-
-impl SharedMemoryContext {
-    pub(super) fn new(shared_memory: SharedMemory, index: u32) -> Self {
-        Self { shared_memory, leader_depth: 0, index }
-    }
-
-    pub(super) fn sync(&self) -> bool {
-        self.shared_memory.sync()
-    }
-
-    pub(super) fn get_slot(&self, slot: u32) -> *mut u8 {
-        self.shared_memory.get_slot(slot)
-    }
-
-    pub(super) fn this_slot(&self) -> *mut u8 {
-        self.get_slot(self.index)
-    }
-
-    pub(super) fn enter_critical_section(&mut self) -> bool {
-        let leader = self.is_leader() || self.shared_memory.sync();
-
-        if leader {
-            self.leader_depth += 1;
-        }
-
-        leader
-    }
-
-    pub(super) fn exit_critical_section(&mut self) {
-        if self.is_leader() {
-            self.leader_depth -= 1;
-        }
-
-        if !self.is_leader() {
-            self.shared_memory.sync();
-        }
-    }
-
-    fn is_leader(&self) -> bool {
-        self.leader_depth > 0
-    }
-}
-
-impl Role {
-    pub(super) fn ctx(&self) -> &SharedMemoryContext {
-        match self {
-            Role::Parent(parent) => &parent.shared_mem_ctx,
-            Role::Child(child) => &child.shared_mem_ctx,
-        }
-    }
-    pub(super) fn ctx_mut(&mut self) -> &mut SharedMemoryContext {
-        match self {
-            Role::Parent(parent) => &mut parent.shared_mem_ctx,
-            Role::Child(child) => &mut child.shared_mem_ctx,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub(super) struct ChildLink {
-    pid: Pid,
-}
-
-impl ChildLink {
-    pub(super) fn new(pid: Pid) -> Self {
-        Self { pid }
-    }
-
-    pub(super) fn kill_child(&self) {
-        let _ = kill(self.pid);
-        let _ = waitpid(self.pid); 
+    fn sync() {
+        fifo_push_blocking(MSG_BARRIER);
+        while fifo_pop_blocking() != MSG_ACK { }
     }
 }
