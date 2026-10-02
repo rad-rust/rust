@@ -52,7 +52,7 @@
 
 mod by_move_body;
 mod drop;
-mod layout;
+pub(crate) mod layout;
 
 pub(super) use by_move_body::coroutine_by_move_body_def_id;
 use drop::{
