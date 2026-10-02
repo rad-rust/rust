@@ -758,6 +758,7 @@ impl<'a, 'tcx> Promoter<'a, 'tcx> {
                 source_info: SourceInfo::outermost(span),
                 kind: TerminatorKind::Return,
                 loop_hint_attrs: ThinVec::new(),
+                id: None,
             }),
             false,
         ))
@@ -847,6 +848,7 @@ impl<'a, 'tcx> Promoter<'a, 'tcx> {
                     source_info: terminator.source_info,
                     kind: mem::replace(&mut terminator.kind, TerminatorKind::Goto { target }),
                     loop_hint_attrs: ThinVec::new(),
+                    id: None,
                 }
             };
 

@@ -99,6 +99,7 @@ fn add_move_for_packed_drop<'tcx>(
             source_info,
             kind: TerminatorKind::Goto { target },
             loop_hint_attrs: ThinVec::new(),
+            id: None,
         }),
         is_cleanup,
     ));

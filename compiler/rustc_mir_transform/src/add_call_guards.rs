@@ -93,6 +93,7 @@ impl<'tcx> crate::MirPass<'tcx> for AddCallGuards {
                     source_info,
                     kind: TerminatorKind::Goto { target },
                     loop_hint_attrs: ThinVec::new(),
+                    id: None,
                 }),
                 is_cleanup,
             );

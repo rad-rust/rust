@@ -176,6 +176,7 @@ impl<'tcx> crate::MirPass<'tcx> for EarlyOtherwiseBranch {
                         targets: eq_targets,
                     },
                     loop_hint_attrs: ThinVec::new(),
+                    id: None,
                 }),
                 bbs[parent].is_cleanup,
             );
@@ -231,6 +232,7 @@ fn evaluate_candidate<'tcx>(
         kind: TerminatorKind::SwitchInt { targets: child_targets, discr: child_discr },
         source_info,
         loop_hint_attrs: _,
+        id: _,
     } = bbs[child].terminator()
     else {
         return None;

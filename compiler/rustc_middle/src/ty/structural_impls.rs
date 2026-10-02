@@ -199,6 +199,7 @@ TrivialTypeTraversalImpls! {
     crate::mir::SourceInfo,
     crate::mir::SourceScope,
     crate::mir::SourceScopeLocalData,
+    crate::mir::StatementId,
     crate::mir::SwitchTargets,
     crate::mir::WithRetag,
     crate::traits::IsConstable,

@@ -118,6 +118,7 @@ pub(crate) fn check_pointers<'tcx, F>(
                         unwind: UnwindAction::Unreachable,
                     },
                     loop_hint_attrs: ThinVec::new(),
+                    id: None,
                 });
             }
         }

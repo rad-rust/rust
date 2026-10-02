@@ -168,6 +168,7 @@ declare_passes! {
     mod post_drop_elaboration : CheckLiveDrops;
     mod prettify : ReorderBasicBlocks, ReorderLocals;
     mod promote_consts : PromoteTemps;
+    mod rad_statement_ids : RadStatementIds;
     mod rad_write_sets : RadWriteSets;
     mod ref_prop : ReferencePropagation;
     mod remove_noop_landing_pads : RemoveNoopLandingPads;
@@ -480,7 +481,12 @@ fn mir_promoted(
     pm::run_passes(
         tcx,
         &mut body,
-        &[&promote_pass, &simplify::SimplifyCfg::PromoteConsts, &coverage::InstrumentCoverage],
+        &[
+            &promote_pass,
+            &simplify::SimplifyCfg::PromoteConsts,
+            &coverage::InstrumentCoverage,
+            &rad_statement_ids::RadStatementIds,
+        ],
         Some(MirPhase::Analysis(AnalysisPhase::Initial)),
     );
 

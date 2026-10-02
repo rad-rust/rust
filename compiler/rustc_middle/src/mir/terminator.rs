@@ -420,6 +420,7 @@ pub struct Terminator<'tcx> {
     pub source_info: SourceInfo,
     pub kind: TerminatorKind<'tcx>,
     pub loop_hint_attrs: ThinVec<AttributeKind>,
+    pub id: Option<StatementId>,
 }
 
 impl<'tcx> Terminator<'tcx> {

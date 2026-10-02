@@ -257,6 +257,7 @@ impl<'tcx> TransformVisitor<'tcx> {
                 source_info,
                 kind: TerminatorKind::Return,
                 loop_hint_attrs: ThinVec::new(),
+                id: None,
             }),
             false,
         ));
@@ -745,13 +746,14 @@ fn insert_switch<'tcx>(
         source_info: SourceInfo::outermost(body.span),
         kind: switch,
         loop_hint_attrs: ThinVec::new(),
+        id: None,
     });
 }
 
 fn insert_term_block<'tcx>(body: &mut Body<'tcx>, kind: TerminatorKind<'tcx>) -> BasicBlock {
     let source_info = SourceInfo::outermost(body.span);
     body.basic_blocks_mut().push(BasicBlockData::new(
-        Some(Terminator { source_info, kind, loop_hint_attrs: ThinVec::new() }),
+        Some(Terminator { source_info, kind, loop_hint_attrs: ThinVec::new(), id: None }),
         false,
     ))
 }
@@ -780,6 +782,7 @@ fn insert_poll_ready_block<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) -> Ba
             source_info,
             kind: TerminatorKind::Return,
             loop_hint_attrs: ThinVec::new(),
+            id: None,
         }),
         false,
     ))
@@ -840,6 +843,8 @@ fn generate_poison_block_and_redirect_unwinds_there<'tcx>(
             kind: TerminatorKind::UnwindResume,
 
             loop_hint_attrs: ThinVec::new(),
+
+            id: None,
         }),
         true,
     ));
@@ -856,6 +861,8 @@ fn generate_poison_block_and_redirect_unwinds_there<'tcx>(
                     kind: TerminatorKind::Goto { target: poison_block },
 
                     loop_hint_attrs: ThinVec::new(),
+
+                    id: None,
                 };
             }
         } else if !block.is_cleanup
@@ -1024,6 +1031,8 @@ fn create_cases<'tcx>(
                         kind: TerminatorKind::Goto { target },
 
                         loop_hint_attrs: ThinVec::new(),
+
+                        id: None,
                     }),
                     false,
                 ));

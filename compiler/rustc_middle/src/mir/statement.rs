@@ -16,6 +16,15 @@ use crate::ty::{CoroutineArgsExt, Unnormalized};
 ///////////////////////////////////////////////////////////////////////////
 // Statements
 
+rustc_index::newtype_index! {
+    /// A unique identifier for Statements and Terminators to pass borrow checker data to later passes
+    #[stable_hash]
+    #[encodable]
+    #[orderable]
+    #[debug_format = "s{}"]
+    pub struct StatementId {}
+}
+
 /// A statement in a basic block, including information about its source code.
 #[derive(Clone, TyEncodable, TyDecodable, StableHash, TypeFoldable, TypeVisitable)]
 #[non_exhaustive]
@@ -24,6 +33,7 @@ pub struct Statement<'tcx> {
     pub kind: StatementKind<'tcx>,
     /// Some debuginfos appearing before the primary statement.
     pub debuginfos: StmtDebugInfos<'tcx>,
+    pub id: Option<StatementId>,
 }
 
 impl<'tcx> Statement<'tcx> {
@@ -43,7 +53,7 @@ impl<'tcx> Statement<'tcx> {
     }
 
     pub fn new(source_info: SourceInfo, kind: StatementKind<'tcx>) -> Self {
-        Statement { source_info, kind, debuginfos: StmtDebugInfos::default() }
+        Statement { source_info, kind, debuginfos: StmtDebugInfos::default(), id: None }
     }
 }
 

@@ -281,7 +281,7 @@ pub fn build_drop_shim<'tcx>(
     let mut blocks = IndexVec::with_capacity(2);
     let block = |blocks: &mut IndexVec<_, _>, kind| {
         blocks.push(BasicBlockData::new(
-            Some(Terminator { source_info, kind, loop_hint_attrs: ThinVec::new() }),
+            Some(Terminator { source_info, kind, loop_hint_attrs: ThinVec::new(), id: None }),
             false,
         ))
     };
@@ -339,6 +339,7 @@ pub fn build_drop_shim<'tcx>(
                 fn_span: span,
             },
             loop_hint_attrs: ThinVec::new(),
+            id: None,
         });
     } else {
         let patch = {
@@ -495,6 +496,7 @@ fn build_thread_local_shim<'tcx>(tcx: TyCtxt<'tcx>, shim: ty::ShimKind<'tcx>) ->
             source_info,
             kind: TerminatorKind::Return,
             loop_hint_attrs: ThinVec::new(),
+            id: None,
         }),
         false,
     )]);
@@ -581,7 +583,7 @@ impl<'tcx> CloneShimBuilder<'tcx> {
         let source_info = self.source_info();
         self.blocks.push(BasicBlockData::new_stmts(
             statements,
-            Some(Terminator { source_info, kind, loop_hint_attrs: ThinVec::new() }),
+            Some(Terminator { source_info, kind, loop_hint_attrs: ThinVec::new(), id: None }),
             is_cleanup,
         ))
     }
@@ -927,7 +929,7 @@ fn build_call_shim<'tcx>(
     let block = |blocks: &mut IndexVec<_, _>, statements, kind, is_cleanup| {
         blocks.push(BasicBlockData::new_stmts(
             statements,
-            Some(Terminator { source_info, kind, loop_hint_attrs: ThinVec::new() }),
+            Some(Terminator { source_info, kind, loop_hint_attrs: ThinVec::new(), id: None }),
             is_cleanup,
         ))
     };
@@ -1058,6 +1060,7 @@ pub(super) fn build_adt_ctor(tcx: TyCtxt<'_>, ctor_id: DefId) -> Body<'_> {
             source_info,
             kind: TerminatorKind::Return,
             loop_hint_attrs: ThinVec::new(),
+            id: None,
         }),
         false,
     );
@@ -1145,6 +1148,7 @@ fn build_fn_ptr_as_ptr_shim<'tcx>(
             source_info,
             kind: TerminatorKind::Return,
             loop_hint_attrs: ThinVec::new(),
+            id: None,
         }),
         false,
     );
@@ -1184,6 +1188,7 @@ fn build_fn_ptr_from_ptr_shim<'tcx>(
             source_info,
             kind: TerminatorKind::Return,
             loop_hint_attrs: ThinVec::new(),
+            id: None,
         }),
         false,
     );
@@ -1286,6 +1291,7 @@ fn build_construct_coroutine_by_move_shim<'tcx>(
             source_info,
             kind: TerminatorKind::Return,
             loop_hint_attrs: ThinVec::new(),
+            id: None,
         }),
         false,
     );

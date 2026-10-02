@@ -873,6 +873,7 @@ fn inline_call<'tcx, I: Inliner<'tcx>>(
                 source_info: terminator.source_info,
                 kind: TerminatorKind::Goto { target: block },
                 loop_hint_attrs: ThinVec::new(),
+                id: None,
             }),
             caller_body[block].is_cleanup,
         );
@@ -1001,6 +1002,7 @@ fn inline_call<'tcx, I: Inliner<'tcx>>(
         source_info: callsite.source_info,
         kind: TerminatorKind::Goto { target: integrator.map_block(START_BLOCK) },
         loop_hint_attrs: ThinVec::new(),
+        id: None,
     });
 
     // Copy required constants from the callee_body into the caller_body. Although we are only

@@ -154,6 +154,7 @@ where
     succ: BasicBlock,
     unwind: Unwind,
     dropline: Option<BasicBlock>,
+    id: Option<StatementId>,
 }
 
 /// "Elaborates" a drop of `place`/`path` and patches `bb`'s terminator to execute it.
@@ -177,7 +178,8 @@ pub(crate) fn elaborate_drop<'b, 'tcx, D>(
     D: DropElaborator<'b, 'tcx>,
     'tcx: 'b,
 {
-    DropCtxt { elaborator, source_info, place, path, succ, unwind, dropline }.elaborate_drop(bb)
+    let id = elaborator.body().basic_blocks[bb].terminator().id;
+    DropCtxt { elaborator, source_info, place, path, succ, unwind, dropline, id }.elaborate_drop(bb)
 }
 
 impl<'a, 'b, 'tcx, D> DropCtxt<'a, 'b, 'tcx, D>
@@ -825,6 +827,7 @@ where
                 succ,
                 unwind,
                 dropline,
+                id: self.id,
             }
             .elaborated_drop_block()
         } else {
@@ -837,6 +840,7 @@ where
                 dropline,
                 // Using `self.path` here to condition the drop on our own drop flag.
                 path: self.path,
+                id: self.id,
             }
             .complete_drop(succ, unwind)
         }
@@ -1638,13 +1642,23 @@ where
         }
     }
 
+    /// Copy the StatementId of the original Drop to the elaborated one
+    fn derived_id(&self, kind: &TerminatorKind<'tcx>) -> Option<StatementId> {
+        match kind {
+            TerminatorKind::Drop { .. } | TerminatorKind::Call { .. } => self.id,
+            _ => None,
+        }
+    }
+
     #[instrument(level = "trace", skip(self), ret)]
     fn new_block(&mut self, unwind: Unwind, k: TerminatorKind<'tcx>) -> BasicBlock {
+        let id = self.derived_id(&k);
         self.elaborator.patch().new_block(BasicBlockData::new(
             Some(Terminator {
                 source_info: self.source_info,
                 kind: k,
                 loop_hint_attrs: ThinVec::new(),
+                id,
             }),
             unwind.is_cleanup(),
         ))
@@ -1657,12 +1671,14 @@ where
         statements: Vec<Statement<'tcx>>,
         k: TerminatorKind<'tcx>,
     ) -> BasicBlock {
+        let id = self.derived_id(&k);
         self.elaborator.patch().new_block(BasicBlockData::new_stmts(
             statements,
             Some(Terminator {
                 source_info: self.source_info,
                 kind: k,
                 loop_hint_attrs: ThinVec::new(),
+                id,
             }),
             unwind.is_cleanup(),
         ))

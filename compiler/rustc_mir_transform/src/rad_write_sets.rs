@@ -11,6 +11,7 @@ use rustc_mir_dataflow::impls::always_storage_live_locals;
 
 use crate::PassPolicy;
 use crate::coroutine::layout::{LivenessInfo, locals_live_across_suspend_points};
+use crate::rad_statement_ids::{id_label, repeated_ids, unnumbered};
 
 pub(super) struct RadWriteSets;
 
@@ -79,12 +80,18 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
     eprintln!("=== rad write sets: {} ===", tcx.def_path_str(body.source.def_id()));
 
     let suspension = |bb| checkpoints.iter().position(|&c| c == bb).unwrap();
-    // The same computation `StateTransform` uses to choose what the future keeps at each
-    // suspension, so a write kept here is a write to a field of the future.
     let movable = tcx.coroutine_movability(body.source.def_id()) == hir::Movability::Movable;
     let liveness =
         locals_live_across_suspend_points(tcx, body, &always_storage_live_locals(body), movable);
     let source_map = tcx.sess.source_map();
+
+    // Find instructions with duplicated borrow checker IDs or no ID
+    let unnumbered = unnumbered(body);
+    let (shared, duplicated) = repeated_ids(body);
+    eprintln!(
+        "  ids: {} without one {unnumbered:?}, {shared} shared by elaborated drops, {duplicated} duplicated",
+        unnumbered.len()
+    );
 
     for (index, &end) in checkpoints.iter().enumerate() {
         // Find segments between two await() calls
@@ -143,12 +150,14 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
                         _ => unreachable!("not recorded as a write: {context:?}"),
                     };
                     let how = target(tcx, body, place);
-                    eprintln!("    {location:?} {what:<10} {how:<8} {place:?}");
+                    let id = id_label(body, location);
+                    eprintln!("    {location:?} {id:<5} {what:<10} {how:<8} {place:?}");
                 }
                 Effect::Call => {
                     let mut head = String::new();
                     body[location.block].terminator().kind.fmt_head(&mut head).unwrap();
-                    eprintln!("    {location:?} call       {head}");
+                    let id = id_label(body, location);
+                    eprintln!("    {location:?} {id:<5} call       {head}");
                 }
                 Effect::Intrinsic => eprintln!("    {location:?} intrinsic  copy_nonoverlapping"),
             }

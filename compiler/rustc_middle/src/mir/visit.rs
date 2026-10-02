@@ -414,7 +414,7 @@ macro_rules! make_mir_visitor {
                 statement: & $($mutability)? Statement<'tcx>,
                 location: Location
             ) {
-                let Statement { source_info, kind, debuginfos } = statement;
+                let Statement { source_info, kind, debuginfos, id: _ } = statement;
 
                 self.visit_source_info(source_info);
                 for debuginfo in debuginfos as & $($mutability)? [_] {
@@ -518,7 +518,7 @@ macro_rules! make_mir_visitor {
                 terminator: &$($mutability)? Terminator<'tcx>,
                 location: Location
             ) {
-                let Terminator { source_info, kind, loop_hint_attrs: _ } = terminator;
+                let Terminator { source_info, kind, loop_hint_attrs: _, id: _ } = terminator;
 
                 self.visit_source_info(source_info);
                 match kind {

@@ -320,6 +320,7 @@ impl<'a, 'tcx> ParseCtxt<'a, 'tcx> {
             source_info: SourceInfo { span, scope: self.source_scope },
             kind: terminator,
             loop_hint_attrs: ThinVec::new(),
+            id: None,
         });
 
         Ok(data)
