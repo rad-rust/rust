@@ -2,8 +2,8 @@ use rustc_hir as hir;
 use rustc_index::bit_set::DenseBitSet;
 use rustc_middle::mir::visit::{MutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
-    BasicBlock, Body, Local, Location, NonDivergingIntrinsic, Place, ProjectionElem, START_BLOCK,
-    Statement, StatementKind, Terminator, TerminatorKind,
+    BasicBlock, Body, BodyLoans, Local, Location, NonDivergingIntrinsic, Place, ProjectionElem,
+    START_BLOCK, Statement, StatementKind, Terminator, TerminatorKind,
 };
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{CAPTURE_STRUCT_LOCAL, TyCtxt};
@@ -11,7 +11,7 @@ use rustc_mir_dataflow::impls::always_storage_live_locals;
 
 use crate::PassPolicy;
 use crate::coroutine::layout::{LivenessInfo, locals_live_across_suspend_points};
-use crate::rad_statement_ids::{id_label, repeated_ids, unnumbered};
+use crate::rad_statement_ids::{id_at, id_label, repeated_ids, unnumbered};
 
 pub(super) struct RadWriteSets;
 
@@ -85,6 +85,16 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
         locals_live_across_suspend_points(tcx, body, &always_storage_live_locals(body), movable);
     let source_map = tcx.sess.source_map();
 
+    // Get live aliasing info from polonius
+    let def = body.source.def_id().expect_local();
+    let loans = tcx
+        .mir_borrowck(tcx.typeck_root_def_id_local(def))
+        .ok()
+        .and_then(|result| result.loans.get(&def));
+    if loans.is_none() {
+        eprintln!("  polonius: no live loans recorded (needs `-Zpolonius=next`)");
+    }
+
     // Find instructions with duplicated borrow checker IDs or no ID
     let unnumbered = unnumbered(body);
     let (shared, duplicated) = repeated_ids(body);
@@ -152,17 +162,40 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
                     let how = target(tcx, body, place);
                     let id = id_label(body, location);
                     eprintln!("    {location:?} {id:<5} {what:<10} {how:<8} {place:?}");
+                    // Find where this Place actually aliases
+                    if place.is_indirect() || context == MutatingUseContext::Drop {
+                        print_live_loans(loans, body, location);
+                    }
                 }
                 Effect::Call => {
                     let mut head = String::new();
                     body[location.block].terminator().kind.fmt_head(&mut head).unwrap();
                     let id = id_label(body, location);
                     eprintln!("    {location:?} {id:<5} call       {head}");
+                    print_live_loans(loans, body, location);
                 }
                 Effect::Intrinsic => eprintln!("    {location:?} intrinsic  copy_nonoverlapping"),
             }
         }
         eprintln!("    ({not_saved} writes to locals not saved here)");
+    }
+}
+
+/// Prints the borrowed places of the loans borrowck found live at the instruction at `location`.
+fn print_live_loans<'tcx>(loans: Option<&BodyLoans<'tcx>>, body: &Body<'tcx>, location: Location) {
+    let Some(loans) = loans else { return };
+    match id_at(body, location).and_then(|id| loans.live.get(&id)) {
+        Some(live) => {
+            let live: Vec<String> = live
+                .iter()
+                .map(|loan| {
+                    let (place, mutability) = loans.loans[loan];
+                    format!("{loan:?} &{}{place:?}", mutability.prefix_str())
+                })
+                .collect();
+            eprintln!("                 live: {{{}}}", live.join(", "));
+        }
+        None => eprintln!("                 live: no borrowck result"),
     }
 }
 

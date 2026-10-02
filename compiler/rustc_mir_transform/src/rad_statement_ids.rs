@@ -25,13 +25,17 @@ impl<'tcx> crate::MirPass<'tcx> for RadStatementIds {
     }
 }
 
-/// The id of the statement or terminator at `location`, as printed.
-pub(super) fn id_label(body: &Body<'_>, location: Location) -> String {
+/// The id of the statement or terminator at `location`.
+pub(super) fn id_at(body: &Body<'_>, location: Location) -> Option<StatementId> {
     match body.stmt_at(location) {
         Either::Left(statement) => statement.id,
         Either::Right(terminator) => terminator.id,
     }
-    .map_or_else(|| "-".to_string(), |id| format!("{id:?}"))
+}
+
+/// The id of the statement or terminator at `location`, as printed.
+pub(super) fn id_label(body: &Body<'_>, location: Location) -> String {
+    id_at(body, location).map_or_else(|| "-".to_string(), |id| format!("{id:?}"))
 }
 
 /// Find ids are shared by more than one instruction

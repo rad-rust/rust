@@ -38,7 +38,7 @@ mod dump;
 pub(crate) mod legacy;
 mod liveness;
 mod liveness_constraints;
-mod terminator_live_loans;
+mod statement_live_loans;
 
 use rustc_data_structures::fx::FxHashSet;
 use rustc_index::IndexVec;
@@ -51,7 +51,7 @@ use rustc_mir_dataflow::points::{DenseLocationMap, PointIndex};
 pub(self) use self::constraints::*;
 pub(crate) use self::dump::dump_polonius_mir;
 pub(crate) use self::liveness_constraints::record_live_region_variance;
-pub(crate) use self::terminator_live_loans::terminator_live_loans;
+pub(crate) use self::statement_live_loans::statement_live_loans;
 use crate::constraints::OutlivesConstraint;
 use crate::dataflow::BorrowIndex;
 pub(crate) use crate::polonius::liveness::DeferredRegionLiveness;

@@ -455,14 +455,14 @@ fn borrowck_check_region_constraints<'diag, 'tcx>(
         &borrow_set,
         polonius_context.as_ref(),
     );
-    if let Some(points) = polonius::terminator_live_loans(
+    if let Some(loans) = polonius::statement_live_loans(
         infcx.tcx,
         body,
         &regioncx,
         &borrow_set,
         polonius_context.as_ref(),
     ) {
-        root_cx.record_terminator_live_loans(def, points);
+        root_cx.record_loans(def, loans);
     }
 
     // We also have a `#[rustc_regions]` annotation that causes us to dump

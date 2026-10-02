@@ -6,12 +6,12 @@ use rustc_abi::{FieldIdx, VariantIdx};
 use rustc_data_structures::fx::FxIndexMap;
 use rustc_errors::ErrorGuaranteed;
 use rustc_index::IndexVec;
-use rustc_index::bit_set::BitMatrix;
+use rustc_index::bit_set::{BitMatrix, DenseBitSet};
 use rustc_macros::{StableHash, TyDecodable, TyEncodable, TypeFoldable, TypeVisitable};
 use rustc_span::def_id::LocalDefId;
 use rustc_span::{Span, Symbol};
 
-use super::{ConstValue, Mutability, Place, SourceInfo};
+use super::{ConstValue, Mutability, Place, SourceInfo, StatementId};
 use crate::ty::{self, CoroutineArgsExt, Ty};
 
 rustc_index::newtype_index! {
@@ -186,22 +186,24 @@ pub struct DestructuredConstant<'tcx> {
 pub struct BorrowCheckResult<'tcx> {
     /// The fully resolved hidden types of the opaque types the bodies define
     pub hidden_types: FxIndexMap<LocalDefId, ty::DefinitionSiteHiddenType<'tcx>>,
-    /// Also saves the Polonius type-checker liveness stuff
-    pub terminator_live_loans: FxIndexMap<LocalDefId, Vec<TerminatorLiveLoans<'tcx>>>,
+    /// Also saves the Polonius type-checker liveness stuff, per body
+    pub loans: FxIndexMap<LocalDefId, BodyLoans<'tcx>>,
 }
 
-/// The live loans from Polonius between sets of two terminators
+rustc_index::newtype_index! {
+    /// A loan in [`BodyLoans::loans`].
+    #[stable_hash]
+    #[encodable]
+    #[orderable]
+    #[debug_format = "l{}"]
+    pub struct LoanId {}
+}
+
+/// A list of loans for each body and the liveness during each statement
 #[derive(Debug, StableHash)]
-pub struct TerminatorLiveLoans<'tcx> {
-    pub kind: LiveLoansTerminatorKind,
-    /// The span of the terminator, used with `kind` to find it again after MIR transforms
-    pub span: Span,
-    /// The borrowed places of the live loans
-    pub loans: Vec<(Place<'tcx>, Mutability)>,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, StableHash)]
-pub enum LiveLoansTerminatorKind {
-    Call,
-    Yield,
+pub struct BodyLoans<'tcx> {
+    /// Alias analysis results from Polonius mapped to each LoanId
+    pub loans: IndexVec<LoanId, (Place<'tcx>, Mutability)>,
+    /// The loans live at each recorded instruction, by statement id.
+    pub live: FxIndexMap<StatementId, DenseBitSet<LoanId>>,
 }
