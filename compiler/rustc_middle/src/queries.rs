@@ -1268,7 +1268,7 @@ rustc_queries! {
     /// Borrow-checks the given typeck root, e.g. functions, const/static items,
     /// and its children, e.g. closures, inline consts.
     query mir_borrowck(key: LocalDefId) -> Result<
-        &'tcx FxIndexMap<LocalDefId, ty::DefinitionSiteHiddenType<'tcx>>,
+        &'tcx mir::BorrowCheckResult<'tcx>,
         ErrorGuaranteed
     > {
         desc { "borrow-checking `{}`", tcx.def_path_str(key) }

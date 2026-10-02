@@ -6,7 +6,7 @@ use rustc_abi::FieldIdx;
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_errors::DiagCtxtHandle;
 use rustc_hir::def_id::LocalDefId;
-use rustc_middle::mir::ConstraintCategory;
+use rustc_middle::mir::{BorrowCheckResult, ConstraintCategory, TerminatorLiveLoans};
 use rustc_middle::ty::{self, TyCtxt};
 use rustc_span::ErrorGuaranteed;
 use smallvec::SmallVec;
@@ -42,6 +42,7 @@ pub(super) struct BorrowCheckRootCtxt<'diag, 'tcx: 'diag> {
     collect_region_constraints_results:
         FxIndexMap<LocalDefId, CollectRegionConstraintsResult<'tcx>>,
     propagated_borrowck_results: FxHashMap<LocalDefId, PropagatedBorrowCheckResults<'tcx>>,
+    terminator_live_loans: FxIndexMap<LocalDefId, Vec<TerminatorLiveLoans<'tcx>>>,
     tainted_by_errors: &'diag Cell<Option<ErrorGuaranteed>>,
     /// This should be `None` during normal compilation. See [`crate::consumers`] for more
     /// information on how this is used.
@@ -62,6 +63,7 @@ impl<'diag, 'tcx> BorrowCheckRootCtxt<'diag, 'tcx> {
             unconstrained_hidden_type_errors: Default::default(),
             collect_region_constraints_results: Default::default(),
             propagated_borrowck_results: Default::default(),
+            terminator_live_loans: Default::default(),
             tainted_by_errors,
             consumer,
         }
@@ -86,14 +88,22 @@ impl<'diag, 'tcx> BorrowCheckRootCtxt<'diag, 'tcx> {
         &self.propagated_borrowck_results[&nested_body_def_id].used_mut_upvars
     }
 
-    pub(super) fn finalize(
-        self,
-    ) -> Result<&'tcx FxIndexMap<LocalDefId, ty::DefinitionSiteHiddenType<'tcx>>, ErrorGuaranteed>
-    {
+    pub(super) fn record_terminator_live_loans(
+        &mut self,
+        def: LocalDefId,
+        points: Vec<TerminatorLiveLoans<'tcx>>,
+    ) {
+        self.terminator_live_loans.insert(def, points);
+    }
+
+    pub(super) fn finalize(self) -> Result<&'tcx BorrowCheckResult<'tcx>, ErrorGuaranteed> {
         if let Some(guar) = self.tainted_by_errors.get() {
             Err(guar)
         } else {
-            Ok(self.tcx.arena.alloc(self.hidden_types))
+            Ok(self.tcx.arena.alloc(BorrowCheckResult {
+                hidden_types: self.hidden_types,
+                terminator_live_loans: self.terminator_live_loans,
+            }))
         }
     }
 

@@ -116,7 +116,7 @@ pub fn provide(providers: &mut Providers) {
 fn mir_borrowck(
     tcx: TyCtxt<'_>,
     def: LocalDefId,
-) -> Result<&FxIndexMap<LocalDefId, ty::DefinitionSiteHiddenType<'_>>, ErrorGuaranteed> {
+) -> Result<&BorrowCheckResult<'_>, ErrorGuaranteed> {
     assert!(!tcx.is_typeck_child(def.to_def_id()));
     if tcx.is_trivial_const(def) {
         debug!("Skipping borrowck because of trivial const");
@@ -455,13 +455,15 @@ fn borrowck_check_region_constraints<'diag, 'tcx>(
         &borrow_set,
         polonius_context.as_ref(),
     );
-    polonius::dump_rad_points_to(
+    if let Some(points) = polonius::terminator_live_loans(
         infcx.tcx,
         body,
         &regioncx,
         &borrow_set,
         polonius_context.as_ref(),
-    );
+    ) {
+        root_cx.record_terminator_live_loans(def, points);
+    }
 
     // We also have a `#[rustc_regions]` annotation that causes us to dump
     // information.

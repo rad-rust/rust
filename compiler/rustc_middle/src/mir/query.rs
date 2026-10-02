@@ -3,13 +3,15 @@
 use std::fmt::{self, Debug};
 
 use rustc_abi::{FieldIdx, VariantIdx};
+use rustc_data_structures::fx::FxIndexMap;
 use rustc_errors::ErrorGuaranteed;
 use rustc_index::IndexVec;
 use rustc_index::bit_set::BitMatrix;
 use rustc_macros::{StableHash, TyDecodable, TyEncodable, TypeFoldable, TypeVisitable};
+use rustc_span::def_id::LocalDefId;
 use rustc_span::{Span, Symbol};
 
-use super::{ConstValue, SourceInfo};
+use super::{ConstValue, Mutability, Place, SourceInfo};
 use crate::ty::{self, CoroutineArgsExt, Ty};
 
 rustc_index::newtype_index! {
@@ -177,4 +179,29 @@ pub enum AnnotationSource {
 pub struct DestructuredConstant<'tcx> {
     pub variant: Option<VariantIdx>,
     pub fields: &'tcx [(ConstValue, Ty<'tcx>)],
+}
+
+/// Saves the borrow checker results to generate the set of writes we need to checkpoint
+#[derive(Debug, Default, StableHash)]
+pub struct BorrowCheckResult<'tcx> {
+    /// The fully resolved hidden types of the opaque types the bodies define
+    pub hidden_types: FxIndexMap<LocalDefId, ty::DefinitionSiteHiddenType<'tcx>>,
+    /// Also saves the Polonius type-checker liveness stuff
+    pub terminator_live_loans: FxIndexMap<LocalDefId, Vec<TerminatorLiveLoans<'tcx>>>,
+}
+
+/// The live loans from Polonius between sets of two terminators
+#[derive(Debug, StableHash)]
+pub struct TerminatorLiveLoans<'tcx> {
+    pub kind: LiveLoansTerminatorKind,
+    /// The span of the terminator, used with `kind` to find it again after MIR transforms
+    pub span: Span,
+    /// The borrowed places of the live loans
+    pub loans: Vec<(Place<'tcx>, Mutability)>,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, StableHash)]
+pub enum LiveLoansTerminatorKind {
+    Call,
+    Yield,
 }

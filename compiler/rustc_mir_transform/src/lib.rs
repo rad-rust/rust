@@ -168,6 +168,7 @@ declare_passes! {
     mod post_drop_elaboration : CheckLiveDrops;
     mod prettify : ReorderBasicBlocks, ReorderLocals;
     mod promote_consts : PromoteTemps;
+    mod rad_write_sets : RadWriteSets;
     mod ref_prop : ReferencePropagation;
     mod remove_noop_landing_pads : RemoveNoopLandingPads;
     mod remove_place_mention : RemovePlaceMention;
@@ -661,6 +662,7 @@ fn run_runtime_lowering_passes<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
         // elaboration.
         &add_moves_for_packed_drops::AddMovesForPackedDrops,
         &erase_deref_temps::EraseDerefTemps,
+        &rad_write_sets::RadWriteSets,
         &elaborate_box_derefs::ElaborateBoxDerefs,
         &coroutine::StateTransform,
         &Lint(known_panics_lint::KnownPanicsLint),
