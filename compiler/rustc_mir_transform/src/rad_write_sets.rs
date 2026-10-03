@@ -1,9 +1,11 @@
+use rustc_data_structures::fx::{FxIndexMap, FxIndexSet};
 use rustc_hir as hir;
 use rustc_index::bit_set::DenseBitSet;
 use rustc_middle::mir::visit::{MutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
-    BasicBlock, Body, BodyLoans, Local, Location, NonDivergingIntrinsic, Place, ProjectionElem,
-    START_BLOCK, Statement, StatementKind, Terminator, TerminatorKind,
+    BasicBlock, Body, BodyLoans, InstructionLoans, LoanId, Local, Location, Mutability,
+    NonDivergingIntrinsic, Place, ProjectionElem, START_BLOCK, Statement, StatementKind,
+    Terminator, TerminatorKind,
 };
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{CAPTURE_STRUCT_LOCAL, TyCtxt};
@@ -36,7 +38,35 @@ struct Segment {
     after: DenseBitSet<BasicBlock>,
 }
 
-fn segment(body: &Body<'_>, end: BasicBlock) -> Segment {
+/// The poll loop of an `.await`, which rustc lowers as
+/// `loop { match poll(..) { Ready(r) => break r, Pending => {} } cx = yield () }`
+struct PollLoop {
+    /// The `Yield` that suspends while the awaited future is pending
+    suspend: BasicBlock,
+    /// The block the `Yield` resumes into, which jumps back to the loop head
+    resume: BasicBlock,
+}
+
+/// Maps the head of each `.await`'s poll loop to that loop. A resume block that doesn't end in
+/// a `goto` back to the head isn't recognised, so its `.await` keeps every path.
+fn poll_loops(body: &Body<'_>, checkpoints: &[BasicBlock]) -> FxIndexMap<BasicBlock, PollLoop> {
+    let mut loops = FxIndexMap::default();
+    for &suspend in checkpoints {
+        let TerminatorKind::Yield { resume, .. } = body[suspend].terminator().kind else {
+            continue;
+        };
+        if let TerminatorKind::Goto { target: head } = body[resume].terminator().kind {
+            loops.insert(head, PollLoop { suspend, resume });
+        }
+    }
+    loops
+}
+
+fn segment(
+    body: &Body<'_>,
+    poll_loops: &FxIndexMap<BasicBlock, PollLoop>,
+    end: BasicBlock,
+) -> Segment {
     let n = body.basic_blocks.len();
     let mut segment = Segment {
         blocks: DenseBitSet::new_empty(n),
@@ -48,8 +78,18 @@ fn segment(body: &Body<'_>, end: BasicBlock) -> Segment {
     while let Some(bb) = stack.pop() {
         segment.from_entry |= bb == START_BLOCK;
         for &pred in &body.basic_blocks.predecessors()[bb] {
+            // Strangelove's API needs to guarantee that every await() returns `Pending` on its
+            // first poll, so every `.await` suspends at least once. Leaving another `await()`'s
+            // poll loop through `Ready` therefore means its `Yield` already ran and took a
+            // checkpoint. So we need to remove the CFG edge that returns immediately in our analysis.
+            if let Some(poll_loop) = poll_loops.get(&bb)
+                && poll_loop.suspend != end
+                && pred != poll_loop.resume
+            {
+                continue;
+            }
             match body[pred].terminator().kind {
-                // A suspension's drop edge leads to the coroutine being destroyed, not resumed.
+                // A suspension's drop edge leads to the coroutine being destroyed
                 TerminatorKind::Yield { resume, .. } => {
                     if resume == bb {
                         segment.after.insert(pred);
@@ -103,9 +143,12 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
         unnumbered.len()
     );
 
+    // Find the poll loops to split checkpoint segments at
+    let poll_loops = poll_loops(body, &checkpoints);
+
     for (index, &end) in checkpoints.iter().enumerate() {
         // Find segments between two await() calls
-        let segment = segment(body, end);
+        let segment = segment(body, &poll_loops, end);
         let span = source_map.span_to_diagnostic_string(body[end].terminator().source_info.span);
         let starts = segment
             .from_entry
@@ -164,7 +207,7 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
                     eprintln!("    {location:?} {id:<5} {what:<10} {how:<8} {place:?}");
                     // Find where this Place actually aliases
                     if place.is_indirect() || context == MutatingUseContext::Drop {
-                        print_live_loans(loans, body, location);
+                        print_live_loans(tcx, loans, body, location, &saved);
                     }
                 }
                 Effect::Call => {
@@ -172,7 +215,7 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
                     body[location.block].terminator().kind.fmt_head(&mut head).unwrap();
                     let id = id_label(body, location);
                     eprintln!("    {location:?} {id:<5} call       {head}");
-                    print_live_loans(loans, body, location);
+                    print_live_loans(tcx, loans, body, location, &saved);
                 }
                 Effect::Intrinsic => eprintln!("    {location:?} intrinsic  copy_nonoverlapping"),
             }
@@ -181,29 +224,123 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
     }
 }
 
-/// Prints which loans the pointers used by the instruction at `location` can hold.
-fn print_live_loans<'tcx>(loans: Option<&BodyLoans<'tcx>>, body: &Body<'tcx>, location: Location) {
+/// Prints which loans the pointers used by the instruction at `location` can hold, and the
+/// memory those loans resolve to
+fn print_live_loans<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    loans: Option<&BodyLoans<'tcx>>,
+    body: &Body<'tcx>,
+    location: Location,
+    saved: &DenseBitSet<Local>,
+) {
     let Some(loans) = loans else { return };
     let instruction = id_at(body, location).and_then(|id| loans.instructions.get(&id));
-    let Some((instruction, reachable)) =
-        instruction.and_then(|instruction| Some((instruction, instruction.reachable.as_ref()?)))
-    else {
-        eprintln!("                 reaches: no borrowck result");
-        return;
-    };
-    let reachable: Vec<String> = reachable
+    match instruction {
+        Some(InstructionLoans { live, reachable: Some(reachable), outside }) => {
+            let reachable: Vec<String> = reachable
+                .iter()
+                .filter_map(|loan| {
+                    let (place, mutability) = loans.loans[loan]?;
+                    Some(format!("{loan:?} &{}{place:?}", mutability.prefix_str()))
+                })
+                .collect();
+            let outside = if *outside { " + outside" } else { "" };
+            eprintln!(
+                "                 reaches: {{{}}}{outside} (of {} live)",
+                reachable.join(", "),
+                live.count()
+            );
+        }
+        _ => eprintln!("                 reaches: no borrowck result"),
+    }
+    print_targets(&targets(tcx, body, loans, instruction), saved);
+}
+
+/// Prints the memory an instruction can write through its pointers, split by whether it is
+/// saved in the future at this checkpoint
+fn print_targets(targets: &Targets<'_>, saved: &DenseBitSet<Local>) {
+    let (kept, unsaved): (Vec<&Place<'_>>, Vec<_>) = targets
+        .places
         .iter()
-        .filter_map(|loan| {
-            let (place, mutability) = loans.loans[loan]?;
-            Some(format!("{loan:?} &{}{place:?}", mutability.prefix_str()))
-        })
-        .collect();
-    let outside = if instruction.outside { " + outside" } else { "" };
+        .partition(|place| place.local == CAPTURE_STRUCT_LOCAL || saved.contains(place.local));
+    let kept: Vec<String> = kept.iter().map(|place| format!("{place:?}")).collect();
+    let outside = if targets.outside { " + outside" } else { "" };
+    let fallback = if targets.fallback { " (fallback)" } else { "" };
     eprintln!(
-        "                 reaches: {{{}}}{outside} (of {} live)",
-        reachable.join(", "),
-        instruction.live.count()
+        "                 targets: {{{}}}{outside}{fallback}, dropped {} unsaved, {} frozen",
+        kept.join(", "),
+        unsaved.len(),
+        targets.frozen
     );
+}
+
+/// The memory a set of loans can point to
+#[derive(Default)]
+struct Targets<'tcx> {
+    places: FxIndexSet<Place<'tcx>>,
+    /// Memory this body didn't borrow
+    outside: bool,
+    /// The instruction had no borrowck result, so every loan still live was used instead
+    fallback: bool,
+    /// Skip shared loans of `Freeze` data
+    frozen: usize,
+}
+
+/// Turns the loans an instruction's pointers can hold into the memory they point to
+fn targets<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    loans: &BodyLoans<'tcx>,
+    instruction: Option<&InstructionLoans>,
+) -> Targets<'tcx> {
+    let mut targets = Targets::default();
+    match instruction {
+        Some(InstructionLoans { reachable: Some(reachable), outside, .. }) => {
+            targets.outside = *outside;
+            for loan in reachable.iter() {
+                targets.add(tcx, body, loans, loan);
+            }
+        }
+        // Without a result, the pointers can hold any loan still live here.
+        Some(InstructionLoans { live, .. }) => {
+            targets.fallback = true;
+            targets.outside = true;
+            for loan in live.iter() {
+                targets.add(tcx, body, loans, loan);
+            }
+        }
+        // If no result was found above, every loan in the body is marked
+        None => {
+            targets.fallback = true;
+            targets.outside = true;
+            for loan in loans.loans.indices() {
+                targets.add(tcx, body, loans, loan);
+            }
+        }
+    }
+    targets
+}
+
+impl<'tcx> Targets<'tcx> {
+    fn add(&mut self, tcx: TyCtxt<'tcx>, body: &Body<'tcx>, loans: &BodyLoans<'tcx>, loan: LoanId) {
+        // Fake borrows point to nothing
+        let Some((place, mutability)) = loans.loans[loan] else { return };
+        if mutability == Mutability::Not
+            && place.ty(body, tcx).ty.is_freeze(tcx, body.typing_env(tcx))
+        {
+            self.frozen += 1;
+            return;
+        }
+        match place.iter_projections().rev().find(|(_, elem)| *elem == ProjectionElem::Deref) {
+            None => {
+                self.places.insert(place);
+            }
+            // Reborrow's loans are a superset of the original's
+            Some((base, _)) if base.ty(body, tcx).ty.is_ref() => {}
+            // Polonius can't resolve where a Box aliases
+            Some(_) => self.outside = true,
+        }
+    }
 }
 
 /// The locals `StateTransform` stores in the future at the `index`th suspension point.

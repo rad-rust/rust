@@ -5,7 +5,7 @@ use rustc_middle::mir::{
     Body, BodyLoans, BorrowKind, InstructionLoans, LoanId, Location, Mutability, Place,
     ProjectionElem, StatementId, StatementKind, TerminatorKind,
 };
-use rustc_middle::ty::{RegionVid, Ty, TyCtxt};
+use rustc_middle::ty::{self, RegionVid, Ty, TyCtxt};
 use rustc_mir_dataflow::points::{DenseLocationMap, PointIndex};
 
 use super::liveness::LivenessSource;
@@ -57,7 +57,14 @@ impl SiteLoans {
                 .iter_projections()
                 .rev()
                 .find(|(_, elem)| *elem == ProjectionElem::Deref)
-                .map_or_else(Vec::new, |(base, _)| regions(base.ty(body, tcx).ty))
+                .map_or_else(Vec::new, |(base, _)| {
+                    let ty = base.ty(body, tcx).ty;
+                    match *ty.kind() {
+                        // If this is a reference, use the type of the reference target
+                        ty::Ref(region, ..) => vec![universal_regions.to_region_vid(region)],
+                        _ => regions(ty),
+                    }
+                })
         };
 
         for (block, data) in body.basic_blocks.iter_enumerated() {
