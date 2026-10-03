@@ -191,7 +191,7 @@ pub struct BorrowCheckResult<'tcx> {
 }
 
 rustc_index::newtype_index! {
-    /// A loan in [`BodyLoans::loans`].
+    /// A loan in [`BodyLoans::loans`]
     #[stable_hash]
     #[encodable]
     #[orderable]
@@ -203,7 +203,18 @@ rustc_index::newtype_index! {
 #[derive(Debug, StableHash)]
 pub struct BodyLoans<'tcx> {
     /// Alias analysis results from Polonius mapped to each LoanId
-    pub loans: IndexVec<LoanId, (Place<'tcx>, Mutability)>,
-    /// The loans live at each recorded instruction, by statement id.
-    pub live: FxIndexMap<StatementId, DenseBitSet<LoanId>>,
+    pub loans: IndexVec<LoanId, Option<(Place<'tcx>, Mutability)>>,
+    /// Instructions that need an alias analysis and the liveness info
+    pub instructions: FxIndexMap<StatementId, InstructionLoans>,
+}
+
+/// Instructions that are writes through a pointer, calls, drops or suspensions
+#[derive(Debug, StableHash)]
+pub struct InstructionLoans {
+    /// Live loans at the instruction's point
+    pub live: DenseBitSet<LoanId>,
+    /// Set of eligible loans that are still alive at the instruction
+    pub reachable: Option<DenseBitSet<LoanId>>,
+    /// Whether those pointers can also hold memory not borrowed in this body
+    pub outside: bool,
 }

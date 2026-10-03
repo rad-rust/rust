@@ -181,22 +181,29 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
     }
 }
 
-/// Prints the borrowed places of the loans borrowck found live at the instruction at `location`.
+/// Prints which loans the pointers used by the instruction at `location` can hold.
 fn print_live_loans<'tcx>(loans: Option<&BodyLoans<'tcx>>, body: &Body<'tcx>, location: Location) {
     let Some(loans) = loans else { return };
-    match id_at(body, location).and_then(|id| loans.live.get(&id)) {
-        Some(live) => {
-            let live: Vec<String> = live
-                .iter()
-                .map(|loan| {
-                    let (place, mutability) = loans.loans[loan];
-                    format!("{loan:?} &{}{place:?}", mutability.prefix_str())
-                })
-                .collect();
-            eprintln!("                 live: {{{}}}", live.join(", "));
-        }
-        None => eprintln!("                 live: no borrowck result"),
-    }
+    let instruction = id_at(body, location).and_then(|id| loans.instructions.get(&id));
+    let Some((instruction, reachable)) =
+        instruction.and_then(|instruction| Some((instruction, instruction.reachable.as_ref()?)))
+    else {
+        eprintln!("                 reaches: no borrowck result");
+        return;
+    };
+    let reachable: Vec<String> = reachable
+        .iter()
+        .filter_map(|loan| {
+            let (place, mutability) = loans.loans[loan]?;
+            Some(format!("{loan:?} &{}{place:?}", mutability.prefix_str()))
+        })
+        .collect();
+    let outside = if instruction.outside { " + outside" } else { "" };
+    eprintln!(
+        "                 reaches: {{{}}}{outside} (of {} live)",
+        reachable.join(", "),
+        instruction.live.count()
+    );
 }
 
 /// The locals `StateTransform` stores in the future at the `index`th suspension point.

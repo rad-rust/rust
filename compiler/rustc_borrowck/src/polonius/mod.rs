@@ -35,10 +35,10 @@
 
 mod constraints;
 mod dump;
+mod instruction_loans;
 pub(crate) mod legacy;
 mod liveness;
 mod liveness_constraints;
-mod statement_live_loans;
 
 use rustc_data_structures::fx::FxHashSet;
 use rustc_index::IndexVec;
@@ -50,8 +50,8 @@ use rustc_mir_dataflow::points::{DenseLocationMap, PointIndex};
 
 pub(self) use self::constraints::*;
 pub(crate) use self::dump::dump_polonius_mir;
+pub(crate) use self::instruction_loans::instruction_loans;
 pub(crate) use self::liveness_constraints::record_live_region_variance;
-pub(crate) use self::statement_live_loans::statement_live_loans;
 use crate::constraints::OutlivesConstraint;
 use crate::dataflow::BorrowIndex;
 pub(crate) use crate::polonius::liveness::DeferredRegionLiveness;
@@ -108,6 +108,9 @@ pub(crate) struct PoloniusContext<'tcx> {
     pub(crate) deferred_liveness: DeferredRegionLiveness<'tcx>,
 
     pub(crate) local_use_map: Option<LocalUseMap>,
+
+    /// The set of live loans that may possibly alias each site
+    site_loans: Option<instruction_loans::SiteLoans>,
 }
 
 /// The direction a constraint can flow into. Used to create liveness constraints according to
@@ -170,7 +173,16 @@ impl<'tcx> PoloniusContext<'tcx> {
                 comp,
             };
             let mut visitor = LoanLivenessVisitor { live_loans: &mut live_loans };
-            graph.traverse(body, borrow_set, location_map, &mut liveness_source, &mut visitor);
+            self.site_loans = instruction_loans::traverse(
+                &graph,
+                infcx.tcx,
+                body,
+                universal_regions,
+                borrow_set,
+                location_map,
+                &mut liveness_source,
+                &mut visitor,
+            );
             liveness.record_live_loans(live_loans);
 
             // The graph can be traversed again during MIR dumping, so we store it here.

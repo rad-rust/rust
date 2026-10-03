@@ -455,7 +455,7 @@ fn borrowck_check_region_constraints<'diag, 'tcx>(
         &borrow_set,
         polonius_context.as_ref(),
     );
-    if let Some(loans) = polonius::statement_live_loans(
+    if let Some(loans) = polonius::instruction_loans(
         infcx.tcx,
         body,
         &regioncx,
