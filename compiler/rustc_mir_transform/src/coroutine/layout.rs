@@ -213,7 +213,7 @@ impl CoroutineSavedLocals {
         out
     }
 
-    pub(super) fn get(&self, local: Local) -> Option<CoroutineSavedLocal> {
+    pub(crate) fn get(&self, local: Local) -> Option<CoroutineSavedLocal> {
         if !self.contains(local) {
             return None;
         }
