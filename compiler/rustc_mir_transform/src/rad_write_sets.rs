@@ -1,17 +1,19 @@
-use rustc_abi::FieldIdx;
+use either::Either;
+use rustc_attr_ir::lang_items::LangItem;
 use rustc_data_structures::fx::{FxIndexMap, FxIndexSet};
 use rustc_hir as hir;
 use rustc_index::IndexVec;
 use rustc_index::bit_set::DenseBitSet;
 use rustc_middle::mir::visit::{MutatingUseContext, NonMutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
-    BasicBlock, Body, BodyLoans, CoroutineSavedLocal, InstructionLoans, LoanId, Local, Location,
-    Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, Rvalue, START_BLOCK,
-    Statement, StatementKind, Terminator, TerminatorKind,
+    BasicBlock, Body, BodyLoans, CheckpointObject, CheckpointTable, CoroutineSavedLocal, Depth,
+    InstructionLoans, LoanId, Local, Location, Mutability, NonDivergingIntrinsic, Operand, Place,
+    ProjectionElem, Rvalue, START_BLOCK, Statement, StatementKind, Terminator, TerminatorKind,
 };
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{CAPTURE_STRUCT_LOCAL, TyCtxt, TypeVisitableExt};
 use rustc_mir_dataflow::impls::always_storage_live_locals;
+use rustc_span::Spanned;
 
 use crate::PassPolicy;
 use crate::coroutine::layout::{LivenessInfo, locals_live_across_suspend_points};
@@ -29,6 +31,10 @@ impl<'tcx> crate::MirPass<'tcx> for RadWriteSets {
             return;
         }
         let Some(plan) = analyze(tcx, body) else { return };
+        // Keep what to copy at each suspension for the pass inserting the checkpoints
+        if let Some(coroutine) = body.coroutine.as_mut() {
+            coroutine.rad_checkpoints = Some(plan.table());
+        }
         with_no_trimmed_paths!(print(tcx, body, &plan));
     }
 }
@@ -113,6 +119,8 @@ fn segment(
 struct CheckpointPlan<'tcx> {
     /// Polonius's results for the body
     loans: Option<&'tcx BodyLoans<'tcx>>,
+    /// The local each slot of the coroutine layout holds
+    slot_locals: IndexVec<CoroutineSavedLocal, Local>,
     /// The list of items that need to be checkpointed
     suspensions: Vec<Suspension<'tcx>>,
 }
@@ -133,26 +141,16 @@ struct Suspension<'tcx> {
     objects: FxIndexMap<CheckpointObject, Depth>,
 }
 
-/// How much of an object the checkpoint copies
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Depth {
-    /// Only the object's own bytes
-    Shallow,
-    /// The object and everything reachable through the references inside it
-    Deep,
-}
-
-/// Something the checkpoint copies
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum CheckpointObject {
-    /// The coroutine's state, which StateTransform writes at every suspension
-    Discriminant,
-    /// A local StateTransform stores in the future, as slot `_sN` of the coroutine layout
-    Saved { slot: CoroutineSavedLocal, local: Local },
-    /// A captured upvar (an argument of the async fn), or all of them if the field is unknown
-    Upvar(Option<FieldIdx>),
-    /// Memory outside the future, reached through a reference
-    Outside,
+impl CheckpointPlan<'_> {
+    /// What to copy at each suspension, without the details of how it was found
+    fn table(&self) -> CheckpointTable {
+        let suspensions = self
+            .suspensions
+            .iter()
+            .map(|suspension| suspension.objects.iter().map(|(&o, &d)| (o, d)).collect())
+            .collect();
+        CheckpointTable { suspensions }
+    }
 }
 
 /// Records that the checkpoint copies `object` at least `depth` deep
@@ -202,6 +200,7 @@ fn analyze<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) -> Option<CheckpointPlan<
         .ok()
         .and_then(|result| result.loans.get(&def));
 
+    let slot_locals = liveness.saved_locals.iter_enumerated().map(|(_, local)| local).collect();
     let analysis = Analysis {
         tcx,
         body,
@@ -219,7 +218,7 @@ fn analyze<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) -> Option<CheckpointPlan<
         .map(|(index, &end)| analysis.suspension(index, end))
         .collect();
 
-    Some(CheckpointPlan { loans, suspensions })
+    Some(CheckpointPlan { loans, slot_locals, suspensions })
 }
 
 /// What `analyze` computes once per body, for every suspension to use
@@ -301,8 +300,7 @@ impl<'tcx> Analysis<'_, 'tcx> {
             };
             return Some(CheckpointObject::Upvar(field));
         }
-        let slot = self.liveness.saved_locals.get(place.local)?;
-        Some(CheckpointObject::Saved { slot, local: place.local })
+        Some(CheckpointObject::Saved(self.liveness.saved_locals.get(place.local)?))
     }
 
     /// Figure out which objects an instruction can write through its pointers
@@ -360,7 +358,7 @@ impl<'tcx> Analysis<'_, 'tcx> {
             Effect::Write(
                 place,
                 MutatingUseContext::Store | MutatingUseContext::SetDiscriminant,
-            ) => Some(vec![self.pointer_holder(place, saved)?]),
+            ) => Some(self.pointer_holder(place, saved)?.slot().into_iter().collect()),
             // A call can write through any reference among its arguments, or its destination's
             Effect::Call => {
                 let TerminatorKind::Call { args, destination, .. } =
@@ -371,19 +369,12 @@ impl<'tcx> Analysis<'_, 'tcx> {
                 let mut holders = Vec::new();
                 for arg in args {
                     // Only types with lifetimes hold references (regions are erased here)
-                    if !arg.node.ty(self.body, self.tcx).has_erased_regions() {
-                        continue;
-                    }
-                    match arg.node {
-                        // A reference read out of memory may have changed since
-                        Operand::Copy(place) | Operand::Move(place) if !place.is_indirect() => {
-                            holders.push(self.holder(place.local, saved, 0)?);
-                        }
-                        _ => return None,
+                    if arg.node.ty(self.body, self.tcx).has_erased_regions() {
+                        holders.extend(self.operand_holder(&arg.node, saved, 0)?.slot());
                     }
                 }
                 if destination.is_indirect() {
-                    holders.push(self.pointer_holder(*destination, saved)?);
+                    holders.extend(self.pointer_holder(*destination, saved)?.slot());
                 }
                 Some(holders)
             }
@@ -393,36 +384,125 @@ impl<'tcx> Analysis<'_, 'tcx> {
     }
 
     /// The saved local holding the reference that `place` writes through
-    fn pointer_holder(&self, place: Place<'tcx>, saved: &DenseBitSet<Local>) -> Option<Local> {
+    fn pointer_holder(&self, place: Place<'tcx>, saved: &DenseBitSet<Local>) -> Option<Source> {
         if !single_deref(place) {
             return None;
         }
         self.holder(place.local, saved, 0)
     }
 
-    /// Follow the reference back to where it was originally stored
-    fn holder(&self, local: Local, saved: &DenseBitSet<Local>, depth: usize) -> Option<Local> {
-        // A saved local that can't change before the checkpoint still holds that reference then
-        if saved.contains(local) && self.defs.fixed.contains(local) {
-            return Some(local);
+    /// Where the reference passed as `operand` leads
+    fn operand_holder(
+        &self,
+        operand: &Operand<'tcx>,
+        saved: &DenseBitSet<Local>,
+        depth: usize,
+    ) -> Option<Source> {
+        match *operand {
+            Operand::Copy(place) | Operand::Move(place) if !place.is_indirect() => {
+                self.holder(place.local, saved, depth)
+            }
+            // A constant, or a reference read out of memory, which may have changed since
+            _ => None,
         }
-        // Skip temporaries that are only assigned once
+    }
+
+    /// Follow the reference back to where it was originally stored
+    fn holder(&self, local: Local, saved: &DenseBitSet<Local>, depth: usize) -> Option<Source> {
+        // A saved local that can't change before the checkpoint still holds that reference then
+        if self.fixed_slot(local, saved) {
+            return Some(Source::Slot(local));
+        }
+        // Stop on depth due to cycles
         if depth > 8 {
             return None;
         }
         let Def::Once(location) = self.defs.defs[local] else { return None };
-        let statement = self.body.stmt_at(location).left()?;
-        let StatementKind::Assign(assign) = &statement.kind else { return None };
-        match &assign.1 {
+        match self.body.stmt_at(location) {
+            // Skip temporaries that are only assigned once
+            Either::Left(statement) => match &statement.kind {
+                StatementKind::Assign(assign) => {
+                    self.assigned_by_statement(&assign.1, saved, depth)
+                }
+                _ => None,
+            },
+            Either::Right(terminator) => match &terminator.kind {
+                TerminatorKind::Call { func, args, .. } => {
+                    self.assigned_by_call(func, args, saved, depth)
+                }
+                _ => None,
+            },
+        }
+    }
+
+    /// Where a reference assigned by `rvalue` leads
+    fn assigned_by_statement(
+        &self,
+        rvalue: &Rvalue<'tcx>,
+        saved: &DenseBitSet<Local>,
+        depth: usize,
+    ) -> Option<Source> {
+        match rvalue {
             // A reborrow
             Rvalue::Ref(_, _, place) | Rvalue::RawPtr(_, place) if single_deref(*place) => {
                 self.holder(place.local, saved, depth + 1)
             }
-            // The same reference
-            Rvalue::Use(Operand::Copy(place) | Operand::Move(place), _) if !place.is_indirect() => {
-                self.holder(place.local, saved, depth + 1)
+            // A borrow of a local
+            Rvalue::Ref(_, _, place) | Rvalue::RawPtr(_, place) if !place.is_indirect() => {
+                if !place.ty(self.body, self.tcx).ty.has_erased_regions() {
+                    Some(Source::Nothing)
+                } else if self.fixed_slot(place.local, saved) {
+                    Some(Source::Slot(place.local))
+                } else {
+                    None
+                }
             }
+            // The same reference
+            Rvalue::Use(operand, _) => self.operand_holder(operand, saved, depth + 1),
             _ => None,
+        }
+    }
+
+    /// Where a reference returned by a call leads
+    fn assigned_by_call(
+        &self,
+        func: &Operand<'tcx>,
+        args: &[Spanned<Operand<'tcx>>],
+        saved: &DenseBitSet<Local>,
+        depth: usize,
+    ) -> Option<Source> {
+        let (callee, _) = func.const_fn_def()?;
+        if self.tcx.is_lang_item(callee, LangItem::GetContext) {
+            // The executor's `Context`, which isn't the task's memory
+            Some(Source::Nothing)
+        } else if self.tcx.is_lang_item(callee, LangItem::PinNewUnchecked) {
+            // `Pin::new_unchecked(r)` wraps the same reference
+            self.operand_holder(&args.first()?.node, saved, depth + 1)
+        } else {
+            None
+        }
+    }
+
+    /// A saved local that keeps its value until the checkpoint
+    fn fixed_slot(&self, local: Local, saved: &DenseBitSet<Local>) -> bool {
+        saved.contains(local) && self.defs.fixed.contains(local)
+    }
+}
+
+/// Where a reference an instruction writes through leads, outside the future
+#[derive(Clone, Copy)]
+enum Source {
+    /// Memory reached through the reference this saved local holds, which the checkpoint follows
+    Slot(Local),
+    /// Nothing outside the future: the future's own memory, or the executor's `Context`
+    Nothing,
+}
+
+impl Source {
+    fn slot(self) -> Option<Local> {
+        match self {
+            Source::Slot(local) => Some(local),
+            Source::Nothing => None,
         }
     }
 }
@@ -561,6 +641,8 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, plan: &CheckpointPlan<'tcx>
         unnumbered.len()
     );
 
+    // The summary shows what's stored for later passes, not the analysis's own copy
+    let table = body.coroutine.as_ref().and_then(|coroutine| coroutine.rad_checkpoints.as_ref());
     for (index, checkpoint) in plan.suspensions.iter().enumerate() {
         let (end, segment) = (checkpoint.end, &checkpoint.segment);
         let span = source_map.span_to_diagnostic_string(body[end].terminator().source_info.span);
@@ -607,13 +689,15 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, plan: &CheckpointPlan<'tcx>
             }
         }
         eprintln!("    ({} writes to locals not saved here)", checkpoint.not_saved);
-        let objects: Vec<String> = checkpoint
-            .objects
+        let Some(objects) = table.map(|table| &table.suspensions[index]) else { continue };
+        let objects: Vec<String> = objects
             .iter()
             .map(|(object, depth)| {
                 let object = match object {
                     CheckpointObject::Discriminant => "state".to_string(),
-                    CheckpointObject::Saved { slot, local } => format!("{slot:?} ({local:?})"),
+                    CheckpointObject::Saved(slot) => {
+                        format!("{slot:?} ({:?})", plan.slot_locals[*slot])
+                    }
                     CheckpointObject::Upvar(Some(field)) => format!("upvar {field:?}"),
                     CheckpointObject::Upvar(None) => "upvars".to_string(),
                     CheckpointObject::Outside => "outside".to_string(),

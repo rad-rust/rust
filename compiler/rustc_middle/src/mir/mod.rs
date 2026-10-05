@@ -165,6 +165,9 @@ pub struct CoroutineInfo<'tcx> {
     /// If this is a coroutine then record the type of source expression that caused this coroutine
     /// to be created.
     pub coroutine_kind: CoroutineKind,
+
+    /// Set of data to be saved at each checkpoint
+    pub rad_checkpoints: Option<CheckpointTable>,
 }
 
 impl<'tcx> CoroutineInfo<'tcx> {
@@ -182,6 +185,7 @@ impl<'tcx> CoroutineInfo<'tcx> {
             coroutine_drop_async: None,
             coroutine_drop_proxy_async: None,
             coroutine_layout: None,
+            rad_checkpoints: None,
         }
     }
 }

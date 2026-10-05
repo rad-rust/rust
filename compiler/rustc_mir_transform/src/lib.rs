@@ -169,6 +169,7 @@ declare_passes! {
     mod prettify : ReorderBasicBlocks, ReorderLocals;
     mod promote_consts : PromoteTemps;
     mod rad_statement_ids : RadStatementIds;
+    mod rad_add_checkpoints : RadAddCheckpoints;
     mod rad_write_sets : RadWriteSets;
     mod ref_prop : ReferencePropagation;
     mod remove_noop_landing_pads : RemoveNoopLandingPads;
@@ -671,6 +672,7 @@ fn run_runtime_lowering_passes<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
         &rad_write_sets::RadWriteSets,
         &elaborate_box_derefs::ElaborateBoxDerefs,
         &coroutine::StateTransform,
+        &rad_add_checkpoints::RadAddCheckpoints,
         &Lint(known_panics_lint::KnownPanicsLint),
     ];
     pm::run_passes_no_validate(tcx, body, passes, Some(MirPhase::Runtime(RuntimePhase::Initial)));

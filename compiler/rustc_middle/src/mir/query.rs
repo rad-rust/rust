@@ -199,6 +199,39 @@ rustc_index::newtype_index! {
     pub struct LoanId {}
 }
 
+/// What the checkpoint at each suspension of a coroutine must copy, computed by
+/// `-Zrad-write-sets` before `StateTransform` for the pass that inserts the checkpoints after it
+#[derive(Clone, Debug, TyEncodable, TyDecodable, StableHash)]
+pub struct CheckpointTable {
+    /// One entry per suspension, in block order of the `Yield`s, which is also the order of
+    /// `StateTransform`'s suspend states (state `3 + index`)
+    pub suspensions: Vec<Vec<(CheckpointObject, Depth)>>,
+}
+
+TrivialTypeTraversalImpls! { CheckpointTable }
+
+/// Something a checkpoint copies
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, TyEncodable, TyDecodable, StableHash)]
+pub enum CheckpointObject {
+    /// The coroutine's state, which `StateTransform` writes at every suspension
+    Discriminant,
+    /// A local `StateTransform` stores in the future, as slot `_sN` of the coroutine layout
+    Saved(CoroutineSavedLocal),
+    /// A captured upvar (an argument of the async fn), or all of them if the field is unknown
+    Upvar(Option<FieldIdx>),
+    /// Memory outside the future, reached through a reference
+    Outside,
+}
+
+/// How much of an object a checkpoint copies
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, TyEncodable, TyDecodable, StableHash)]
+pub enum Depth {
+    /// Only the object's own bytes
+    Shallow,
+    /// The object and everything reachable through the references inside it
+    Deep,
+}
+
 /// A list of loans for each body and the liveness during each statement
 #[derive(Debug, StableHash)]
 pub struct BodyLoans<'tcx> {
