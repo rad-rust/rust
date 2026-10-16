@@ -5,8 +5,15 @@ use rustc_abi::VariantIdx;
 use rustc_middle::mir::{BasicBlock, Body, CheckpointObject, Depth, StatementKind, TerminatorKind};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{CoroutineArgs, CoroutineArgsExt, TyCtxt};
-
 use crate::PassPolicy;
+use rustc_middle::mir::{
+    Terminator, SourceInfo, Operand, BasicBlockData, CallSource, UnwindAction, LocalDecl,
+};
+use rustc_middle::mir::interpret::Scalar;
+use rustc_span::Spanned;
+use rustc_span::sym;
+use rustc_data_structures::thin_vec::ThinVec;
+use rustc_hir::def_id::DefId;
 
 pub(super) struct RadAddCheckpoints;
 
@@ -30,9 +37,11 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
         let path = with_no_trimmed_paths!(tcx.def_path_str(body.source.def_id()));
         eprintln!("=== rad checkpoints: {path} ===");
 
+        let checkpoint = tcx.get_diagnostic_item(sym::checkpoint).unwrap();
+
         for (index, (site, objects)) in sites.iter().zip(&table.suspensions).enumerate() {
             assert_eq!(site.state.as_usize(), CoroutineArgs::RESERVED_VARIANTS + index);
-            emit_checkpoint(tcx, body, site, objects);
+            emit_checkpoint(tcx, body, site, checkpoint, objects);
         }
     }
 }
@@ -67,26 +76,35 @@ fn suspend_sites(body: &Body<'_>) -> Vec<SuspendSite> {
 
 /// Inserts the checkpoint copying `objects` before the coroutine suspends at `site`
 fn emit_checkpoint<'tcx>(
-    _tcx: TyCtxt<'tcx>,
-    _body: &mut Body<'tcx>,
+    tcx: TyCtxt<'tcx>,
+    body: &mut Body<'tcx>,
     site: &SuspendSite,
-    objects: &[(CheckpointObject, Depth)],
+    checkpoint: DefId,
+    _objects: &[(CheckpointObject, Depth)],
 ) {
-    let objects: Vec<String> = objects
-        .iter()
-        .map(|(object, depth)| {
-            let object = match object {
-                CheckpointObject::Discriminant => "state".to_string(),
-                CheckpointObject::Saved(slot) => format!("{slot:?}"),
-                CheckpointObject::Upvar(Some(field)) => format!("upvar {field:?}"),
-                CheckpointObject::Upvar(None) => "upvars".to_string(),
-                CheckpointObject::Outside => "outside".to_string(),
-            };
-            match depth {
-                Depth::Shallow => object,
-                Depth::Deep => format!("{object} deep"),
-            }
-        })
-        .collect();
-    eprintln!("  state {} ({:?}): copy {}", site.state.as_usize(), site.block, objects.join(", "));
+    let span = body.span;
+    let source_info = SourceInfo::outermost(span);
+
+    let dest = body.local_decls.push(LocalDecl::new(tcx.types.unit, span));
+
+    let site_arg = Operand::const_from_scalar(tcx, tcx.types.u32, Scalar::from_u32(site.state.as_u32()), span);
+
+    let blocks = body.basic_blocks_mut();
+    let old_return = blocks[site.block].terminator.take().unwrap();
+    let after = blocks.push(BasicBlockData::new(Some(old_return), false));
+
+    blocks[site.block].terminator = Some(Terminator {
+        source_info,
+        kind: TerminatorKind::Call {
+            func: Operand::function_handle(tcx, checkpoint, &[], span),
+            args: Box::new([Spanned { node: site_arg, span }]),
+            destination: dest.into(),
+            target: Some(after),
+            unwind: UnwindAction::Continue,
+            call_source: CallSource::Misc,
+            fn_span: span,
+        },
+        loop_hint_attrs: ThinVec::new(),
+        id: None,
+    });
 }

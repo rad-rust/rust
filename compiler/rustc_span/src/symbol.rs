@@ -636,6 +636,7 @@ symbols! {
         cfi_encoding,
         char,
         checked_type_aliases,
+        checkpoint,
         clflushopt_target_feature,
         client,
         clippy,
