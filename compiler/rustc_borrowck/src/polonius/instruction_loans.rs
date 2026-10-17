@@ -130,7 +130,7 @@ pub(super) fn traverse<'tcx>(
     liveness_source: &mut impl LivenessSource,
     visitor: &mut LoanLivenessVisitor<'_>,
 ) -> Option<SiteLoans> {
-    if !tcx.sess.opts.unstable_opts.rad_write_sets {
+    if !tcx.rad_checkpointed(body.source.def_id()) {
         graph.traverse(body, borrow_set, location_map, liveness_source, visitor);
         return None;
     }
@@ -165,7 +165,7 @@ pub(crate) fn instruction_loans<'tcx>(
     borrow_set: &BorrowSet<'tcx>,
     polonius_context: Option<&PoloniusContext<'tcx>>,
 ) -> Option<BodyLoans<'tcx>> {
-    if !tcx.sess.opts.unstable_opts.rad_write_sets {
+    if !tcx.rad_checkpointed(body.source.def_id()) {
         return None;
     }
     let polonius_context = polonius_context?;

@@ -11,8 +11,9 @@ use crate::PassPolicy;
 pub(super) struct RadAddCheckpoints;
 
 impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
-    fn policy(&self, ctx: &crate::PassCtx<'_>) -> PassPolicy {
-        PassPolicy::optional(ctx.opts.unstable_opts.rad_write_sets)
+    fn policy(&self, _ctx: &crate::PassCtx<'_>) -> PassPolicy {
+        // Bodies without `#[rad::checkpoint]` are skipped in `run_pass`
+        PassPolicy::optional(true)
     }
 
     fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {

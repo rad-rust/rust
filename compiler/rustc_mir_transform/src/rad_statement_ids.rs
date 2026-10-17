@@ -10,11 +10,16 @@ use crate::PassPolicy;
 pub(super) struct RadStatementIds;
 
 impl<'tcx> crate::MirPass<'tcx> for RadStatementIds {
-    fn policy(&self, ctx: &crate::PassCtx<'_>) -> PassPolicy {
-        PassPolicy::optional(ctx.opts.unstable_opts.rad_write_sets)
+    fn policy(&self, _ctx: &crate::PassCtx<'_>) -> PassPolicy {
+        // Bodies without `#[rad::checkpoint]` are skipped in `run_pass`
+        PassPolicy::optional(true)
     }
 
-    fn run_pass(&self, _tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+    fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+        // Only bodies marked `#[rad::checkpoint]` are analyzed; the others need no ids.
+        if !tcx.rad_checkpointed(body.source.def_id()) {
+            return;
+        }
         let mut ids = (0..).map(StatementId::from_usize);
         for data in body.basic_blocks.as_mut_preserves_cfg() {
             for statement in &mut data.statements {

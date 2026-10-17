@@ -26,12 +26,13 @@ use crate::rad_statement_ids::{id_at, id_label, repeated_ids, unnumbered};
 pub(super) struct RadWriteSets;
 
 impl<'tcx> crate::MirPass<'tcx> for RadWriteSets {
-    fn policy(&self, ctx: &crate::PassCtx<'_>) -> PassPolicy {
-        PassPolicy::optional(ctx.opts.unstable_opts.rad_write_sets)
+    fn policy(&self, _ctx: &crate::PassCtx<'_>) -> PassPolicy {
+        // Bodies without `#[rad::checkpoint]` are skipped in `run_pass`
+        PassPolicy::optional(true)
     }
 
     fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
-        if body.source.promoted.is_some() {
+        if body.source.promoted.is_some() || !tcx.rad_checkpointed(body.source.def_id()) {
             return;
         }
         let Some(plan) = analyze(tcx, body) else { return };

@@ -680,6 +680,15 @@ impl<'tcx> TyCtxt<'tcx> {
         def_id
     }
 
+    /// Whether the body of `def_id` should be checkpointed. The item it is type-checked with must have
+    /// `#[rad::checkpoint]`. That way, the attribute on a fn also selects the `async` blocks and
+    /// closures inside it.
+    pub fn rad_checkpointed(self, def_id: DefId) -> bool {
+        self.get_attrs_by_path(self.typeck_root_def_id(def_id), &[sym::rad, sym::checkpoint])
+            .next()
+            .is_some()
+    }
+
     /// Given the `DefId` and args a closure, creates the type of
     /// `self` argument that the closure expects. For example, for a
     /// `Fn` closure, this would return a reference type `&T` where
