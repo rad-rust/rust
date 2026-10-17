@@ -1,3 +1,12 @@
+Version 1.99.1 (2026-10-15)
+===========================
+
+<a id="1.99.1"></a>
+
+* [library: fix missing symbol `wcslen` on UEFI and embedded targets](https://github.com/rust-lang/rust/issues/163614)
+* [rustc: fix miscompilation of FFI `bool` return values on x86_64](https://github.com/rust-lang/rust/issues/163911)
+* [rust-lld: add the rpath for `libLLVM` on macOS](https://github.com/rust-lang/rust/issues/163947)
+
 Version 1.99.0 (2026-10-01)
 ==========================
 
@@ -116,6 +125,7 @@ Compatibility Notes
   - [`semicolon_in_expressions_from_macros`: Lint on non-local macros too](https://github.com/rust-lang/rust/pull/159222)
   - [Split non-local `semicolon_in_expressions_from_macros` into a separate lint](https://github.com/rust-lang/rust/pull/159700)
 - In Cargo, incremental compilation is now disabled by default when running in CI. CI is detected via the `CI` environment variable. [#17220](https://github.com/rust-lang/cargo/pull/17220)
+- [The Rust Reference no longer recommends using a single pattern to match a union alongside another value, such as in a manually-written tagged union](https://github.com/rust-lang/reference/pull/2303). This was because it was found that such code would, in some circumstances, result in the compiler reading the contents of the union before checking if the rest of the scrutinee matches the rest of the pattern. This can cause undefined behavior in code similar to what the reference previously recommended.
 
 <a id="1.99.0-Internal-Changes"></a>
 
@@ -1536,7 +1546,7 @@ for more information on Rust's tiered platform support.
 Libraries
 ---------
 - [Stabilize the anonymous pipe API](https://github.com/rust-lang/rust/issues/127154)
-- [Add support for unbounded left/right shift operations](https://github.com/rust-lang/rust/issues/129375) 
+- [Add support for unbounded left/right shift operations](https://github.com/rust-lang/rust/issues/129375)
 - [Print pointer metadata in `Debug` impl of raw pointers](https://github.com/rust-lang/rust/pull/135080)
 - [`Vec::with_capacity` guarantees it allocates with the amount requested, even if `Vec::capacity` returns a different number.](https://github.com/rust-lang/rust/pull/135933)
 - Most `std::arch` intrinsics which don't take pointer arguments can now be called from safe code if the caller has the appropriate target features already enabled (https://github.com/rust-lang/stdarch/pull/1714, https://github.com/rust-lang/stdarch/pull/1716, https://github.com/rust-lang/stdarch/pull/1717)
@@ -1610,7 +1620,7 @@ These previously stable APIs are now stable in const contexts:
 - [`char::is_digit`](https://doc.rust-lang.org/stable/std/primitive.char.html#method.is_digit)
 - [`char::is_whitespace`](https://doc.rust-lang.org/stable/std/primitive.char.html#method.is_whitespace)
 - [`<[[T; N]]>::as_flattened`](https://doc.rust-lang.org/stable/std/primitive.slice.html#method.as_flattened)
-- [`<[[T; N]]>::as_flattened_mut`](https://doc.rust-lang.org/stable/std/primitive.slice.html#method.as_flattened_mut) 
+- [`<[[T; N]]>::as_flattened_mut`](https://doc.rust-lang.org/stable/std/primitive.slice.html#method.as_flattened_mut)
 - [`String::into_bytes`](https://doc.rust-lang.org/stable/std/string/struct.String.html#method.into_bytes)
 - [`String::as_str`](https://doc.rust-lang.org/stable/std/string/struct.String.html#method.as_str)
 - [`String::capacity`](https://doc.rust-lang.org/stable/std/string/struct.String.html#method.capacity)

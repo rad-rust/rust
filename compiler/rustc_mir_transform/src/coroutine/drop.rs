@@ -375,8 +375,7 @@ pub(super) fn create_coroutine_drop_shim_proxy_async<'tcx>(
         replace: false,
         drop: None,
     };
-    body.basic_blocks_mut()[call_bb].terminator =
-        Some(Terminator { source_info, kind, loop_hint_attrs: ThinVec::new(), id: None });
+    body.basic_blocks_mut()[call_bb].terminator = Some(Terminator { source_info, kind, id: None });
 
     // Run derefer to fix Derefs that are not in the first place
     deref_finder(tcx, &mut body, false);

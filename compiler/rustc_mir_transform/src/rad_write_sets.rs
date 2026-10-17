@@ -67,7 +67,7 @@ fn find_await(body: &Body<'_>, suspend: BasicBlock) -> Await {
     let TerminatorKind::Yield { resume, .. } = body[suspend].terminator().kind else {
         unrecognised("not a `Yield`")
     };
-    let TerminatorKind::Goto { target: head } = body[resume].terminator().kind else {
+    let TerminatorKind::Goto { target: head, .. } = body[resume].terminator().kind else {
         unrecognised("its resume block doesn't jump back to the loop head")
     };
 

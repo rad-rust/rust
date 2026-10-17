@@ -1373,6 +1373,7 @@ impl<'test> TestCx<'test> {
 
         rustc.args(&["--crate-type", "rlib"]);
         rustc.arg("-Cpanic=abort");
+        rustc.arg("--check-cfg=cfg(target_has_reliable_f16b)");
         rustc.args(self.props.minicore_compile_flags.clone());
 
         let res =
@@ -1942,9 +1943,6 @@ impl<'test> TestCx<'test> {
             }
             Some(CompareMode::NextSolver) => {
                 compiler.args(&["-Znext-solver"]);
-            }
-            Some(CompareMode::NextSolverCoherence) => {
-                compiler.args(&["-Znext-solver=coherence"]);
             }
             Some(CompareMode::SplitDwarf) if self.config.target.contains("windows") => {
                 compiler.args(&["-Csplit-debuginfo=unpacked", "-Zunstable-options"]);

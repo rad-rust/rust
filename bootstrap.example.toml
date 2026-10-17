@@ -956,6 +956,12 @@
 # want to enable this right now.
 #rust.wasm-proc-macros = false
 
+# Enables wasm targets to be built with `-Cpanic=unwind` by default instead of
+# the current `-Cpanic=abort`. This is currently used in testing the Rust
+# compiler itself and is only intended for local development/testing at this
+# time.
+#rust.wasm-panic-unwind-default = false
+
 # =============================================================================
 # Distribution options
 #
@@ -1038,6 +1044,11 @@
 # Instrument LLVM, so that when executed, it will gather profiles
 # Note: for LLVM specifically, this should be a directory, not a file path.
 #pgo.llvm.generate = "/tmp/profiles"
+# Use the following profile to PGO optimize the Cranelift codegen backend.
+#pgo.cranelift.use = "/tmp/profiles/foo.profraw"
+# Instrument the Cranelift codegen backend, so that when executed, it will gather profiles
+# to this path.
+#pgo.cranelift.generate = "/tmp/profiles/foo.profraw"
 
 # =============================================================================
 # Options for specific targets

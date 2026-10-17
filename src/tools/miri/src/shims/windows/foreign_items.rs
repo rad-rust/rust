@@ -1106,9 +1106,9 @@ pub trait EvalContextExt<'tcx>: crate::MiriInterpCxExt<'tcx> {
                     throw_unsup_format!("`GetModuleFileNameW` only supports the NULL handle");
                 }
 
-                // Using the host current_exe is a bit off, but consistent with Linux
-                // (where stdlib reads /proc/self/exe).
-                let path = std::env::current_exe().unwrap();
+                let Some(path) = this.machine.current_exe.clone() else {
+                    throw_unsup_format!("GetModuleFileNameW only works when Miri is run on a file")
+                };
                 let (all_written, size_needed) =
                     this.write_path_to_wide_str_truncated(&path, filename, size.into())?;
 
@@ -1190,6 +1190,16 @@ pub trait EvalContextExt<'tcx>: crate::MiriInterpCxExt<'tcx> {
 
             // Incomplete shims that we "stub out" just to get pre-main initialization code to work.
             // These shims are enabled only when the caller is in the standard library.
+            "NtQueryVolumeInformationFile" if this.frame_in_std() => {
+                let [_handle, _iosb, _info, _length, _class] = this.check_shim_sig(
+                    shim_sig!(extern "system" fn(winapi::HANDLE, *_, *_, u32, i32) -> i32),
+                    (link_name, abi, args),
+                )?;
+                // Return an error to make std think that nothing is a console.
+                // This means the normal NtWriteFile is used for stdout/stderr, greatly simplifying our lives.
+                let not_implemented = this.eval_windows("c", "STATUS_NOT_IMPLEMENTED");
+                this.write_scalar(not_implemented, dest)?;
+            }
             "GetProcessHeap" if this.frame_in_std() => {
                 let [] = this.check_shim_sig(
                     shim_sig!(extern "system" fn() -> winapi::HANDLE),
@@ -1215,24 +1225,6 @@ pub trait EvalContextExt<'tcx>: crate::MiriInterpCxExt<'tcx> {
                 // Pretend these does not exist / nothing happened, by returning zero.
                 this.write_null(dest)?;
             }
-            "GetConsoleMode" if this.frame_in_std() => {
-                let [console, mode] = this.check_shim_sig(
-                    shim_sig!(extern "system" fn(winapi::HANDLE, *_) -> winapi::BOOL),
-                    (link_name, abi, args),
-                )?;
-                this.read_target_isize(console)?;
-                this.deref_pointer_as(mode, this.machine.layouts.u32)?;
-                // Indicate an error.
-                this.write_null(dest)?;
-            }
-            "GetFileType" if this.frame_in_std() => {
-                let [_file] = this.check_shim_sig(
-                    shim_sig!(extern "system" fn(winapi::HANDLE) -> u32),
-                    (link_name, abi, args),
-                )?;
-                // Return unknown file type.
-                this.write_null(dest)?;
-            }
             "AddVectoredExceptionHandler" if this.frame_in_std() => {
                 let [_first, _handler] = this.check_shim_sig(
                     shim_sig!(extern "system" fn(u32, *_) -> *_),
@@ -1249,8 +1241,8 @@ pub trait EvalContextExt<'tcx>: crate::MiriInterpCxExt<'tcx> {
                 // Any non zero value works for the stdlib. This is just used for stack overflows anyway.
                 this.write_int(1, dest)?;
             }
-            // this is only callable from std because we know that std ignores the return value
             "SwitchToThread" if this.frame_in_std() => {
+                // this is only callable from std because we know that std ignores the return value
                 let [] = this.check_shim_sig(
                     shim_sig!(extern "system" fn() -> winapi::BOOL),
                     (link_name, abi, args),
@@ -1259,6 +1251,16 @@ pub trait EvalContextExt<'tcx>: crate::MiriInterpCxExt<'tcx> {
                 this.yield_active_thread();
 
                 // FIXME: this should return a nonzero value if this call does result in switching to another thread.
+                this.write_null(dest)?;
+            }
+            "GetFinalPathNameByHandleW" if this.frame_in_std() => {
+                // Std uses this when debug-printing `File`. We stub it out by returning an error.
+                let [_file, _buf, _bufsz, _flags] = this.check_shim_sig(
+                    shim_sig!(extern "system" fn(winapi::HANDLE, *_, u32, u32) -> u32),
+                    (link_name, abi, args),
+                )?;
+
+                this.set_last_error(IoError::WindowsError("ERROR_NOT_SUPPORTED"))?;
                 this.write_null(dest)?;
             }
 

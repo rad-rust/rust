@@ -1421,6 +1421,12 @@ fn rustc_cargo_env(builder: &Builder<'_>, cargo: &mut Cargo, target: TargetSelec
             cargo.env("JEMALLOC_SYS_WITH_LG_PAGE", "14");
         }
     }
+
+    // Plumb the `rust.wasm-panic-unwind-default` configuration option into the
+    // `rustc_target` crate.
+    if builder.config.wasm_panic_unwind_default {
+        cargo.env("CFG_WASM_PANIC_UNWIND_DEFAULT", "1");
+    }
 }
 
 /// Pass down configuration from the LLVM build into the build of
@@ -1796,6 +1802,7 @@ impl CommandLineStep for CraneliftCodegenBackend {
             .arg("--manifest-path")
             .arg(builder.src.join("compiler/rustc_codegen_cranelift/Cargo.toml"));
         apply_dylib_lto(builder, &build_compiler, &mut cargo);
+        apply_pgo(builder, &mut cargo, build_compiler, &builder.config.cranelift_pgo);
 
         let _guard = builder.msg(
             Kind::Build,
@@ -2675,7 +2682,7 @@ pub fn run_cargo(
         let (filenames_vec, crate_types) = match msg {
             CargoMessage::CompilerArtifact {
                 filenames,
-                target: CargoTarget { crate_types },
+                target: CargoTarget { crate_types, .. },
                 ..
             } => {
                 let mut f: Vec<String> = filenames.into_iter().map(|s| s.into_owned()).collect();
@@ -2882,12 +2889,14 @@ pub fn stream_cargo(
     status.success()
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct CargoTarget<'a> {
-    crate_types: Vec<Cow<'a, str>>,
+    pub crate_types: Vec<Cow<'a, str>>,
+    #[serde(default)]
+    pub doc: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(tag = "reason", rename_all = "kebab-case")]
 pub enum CargoMessage<'a> {
     CompilerArtifact { filenames: Vec<Cow<'a, str>>, target: CargoTarget<'a> },

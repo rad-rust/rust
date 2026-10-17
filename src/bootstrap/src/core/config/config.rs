@@ -229,10 +229,13 @@ pub(crate) struct Config {
     pub rust_break_on_ice: bool,
     pub rust_parallel_frontend_threads: Option<u32>,
     pub rust_rustflags: Vec<String>,
+
+    // Note: modify the ReproducibleArtifacts step when adding new PGO configs here!
     pub rust_pgo: PgoConfig,
     pub rustdoc_pgo: PgoConfig,
     pub cargo_pgo: PgoConfig,
     pub clippy_pgo: PgoConfig,
+    pub cranelift_pgo: PgoConfig,
 
     pub stdlib_semver_baseline: Option<String>,
 
@@ -345,6 +348,8 @@ pub(crate) struct Config {
     pub exec_ctx: ExecutionContext,
 
     pub wasm_proc_macros: bool,
+
+    pub wasm_panic_unwind_default: bool,
 }
 
 impl Config {
@@ -621,6 +626,7 @@ impl Config {
             rustflags: rust_rustflags,
             stdlib_semver_baseline: rust_stdlib_semver_baseline,
             wasm_proc_macros,
+            wasm_panic_unwind_default,
         } = toml_rust.unwrap_or_default();
 
         let Llvm {
@@ -675,6 +681,7 @@ impl Config {
             rustdoc: pgo_rustdoc,
             cargo: pgo_cargo,
             clippy: pgo_clippy,
+            cranelift: pgo_cranelift,
             llvm: pgo_llvm,
         } = toml_pgo.unwrap_or_default();
 
@@ -732,6 +739,7 @@ impl Config {
         let pgo_rustdoc = init_pgo(pgo_rustdoc, "rustdoc");
         let pgo_cargo = init_pgo(pgo_cargo, "cargo");
         let pgo_clippy = init_pgo(pgo_clippy, "clippy");
+        let pgo_cranelift = init_pgo(pgo_cranelift, "cranelift");
 
         let bootstrap_override_lld = rust_bootstrap_override_lld.unwrap_or_default();
 
@@ -1426,6 +1434,7 @@ NOTE: Please add `--stage 2` to your command line, or if you're sure you want to
             compiletest_diff_tool: build_compiletest_diff_tool,
             config: toml_path,
             control_flow_guard: rust_control_flow_guard.unwrap_or(false),
+            cranelift_pgo: pgo_cranelift,
             datadir: install_datadir.map(PathBuf::from),
             deny_warnings,
             description: build_description,
@@ -1606,6 +1615,7 @@ NOTE: Please add `--stage 2` to your command line, or if you're sure you want to
                 .unwrap_or(rust_debug == Some(true)),
             vendor,
             verbose_tests,
+            wasm_panic_unwind_default: wasm_panic_unwind_default.unwrap_or(false),
             wasm_proc_macros: wasm_proc_macros.unwrap_or(false),
             windows_rc: build_windows_rc.map(PathBuf::from),
             yarn: build_yarn.map(PathBuf::from),

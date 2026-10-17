@@ -22,8 +22,11 @@ mod trait_goals;
 
 use derive_where::derive_where;
 use rustc_type_ir::inherent::*;
+use rustc_type_ir::lang_items::SolverTraitLangItem;
 pub use rustc_type_ir::solve::*;
-use rustc_type_ir::{self as ty, Const, Interner, Region, TypeVisitableExt};
+use rustc_type_ir::transmute::Condition;
+use rustc_type_ir::{self as ty, Const, Interner, Region, TraitClause, TypeVisitableExt, Upcast};
+use thin_vec::{ThinVec, thin_vec};
 use tracing::instrument;
 
 pub use self::eval_ctxt::{
@@ -62,7 +65,7 @@ fn has_no_inference_or_external_constraints<I: Interner>(
         ref opaque_types,
         ref normalization_nested_goals,
     } = *response.value.external_constraints;
-    response.value.var_values.is_identity()
+    response.value.is_identity()
         && region_constraints.is_empty()
         && opaque_types.is_empty()
         && normalization_nested_goals.is_empty()
@@ -74,7 +77,7 @@ fn has_only_region_constraints<I: Interner>(response: ty::Canonical<I, Response<
         ref opaque_types,
         ref normalization_nested_goals,
     } = *response.value.external_constraints;
-    response.value.var_values.is_identity_modulo_regions()
+    response.value.is_identity_modulo_regions()
         && opaque_types.is_empty()
         && normalization_nested_goals.is_empty()
 }
@@ -118,7 +121,7 @@ where
         goal: Goal<I, ty::OutlivesClause<I, I::Ty>>,
     ) -> QueryResultOrRerunNonErased<I> {
         let ty::OutlivesClause(ty, lt) = goal.predicate;
-        let ty = self.normalize(GoalSource::Misc, goal.param_env, ty::Unnormalized::new_wip(ty))?;
+        let ty = self.normalize(goal.param_env, ty::Unnormalized::new_wip(ty))?;
 
         // The normalized type can still contain non-rigid higher ranked aliases if their
         // normalization ends up with ambiguity. Or we have non-rigid aliases inside rigid ones.
@@ -456,7 +459,7 @@ where
             );
             // We normalize the self type to be able to relate it with
             // types from candidates.
-            self.add_goal(GoalSource::TypeRelating, projection_goal)?;
+            self.add_goal(GoalSource::Normalization, projection_goal)?;
             self.try_evaluate_added_goals()?;
             Ok(self.deeply_resolve_ignoring_regions(normalized_term))
         } else {
@@ -490,4 +493,43 @@ pub struct GoalEvaluation<I: Interner> {
     /// If the [`Certainty`] was `Maybe`, then keep track of whether the goal has changed
     /// before rerunning it.
     pub stalled_on: Option<GoalStalledOn<I>>,
+}
+
+/// Flatten the `Condition` tree into a conjunction of predicates.
+#[instrument(level = "debug", skip(interner, predicate))]
+pub fn flatten_answer_tree<I: Interner>(
+    interner: I,
+    predicate: TraitClause<I>,
+    cond: Condition<Region<I>, I::Ty>,
+) -> ThinVec<I::Predicate> {
+    match cond {
+        // FIXME(bryangarza): Add separate `IfAny` case, instead of treating as `IfAll`
+        // Not possible until the trait solver supports disjunctions of obligations
+        Condition::IfAll(conds) | Condition::IfAny(conds) => conds
+            .into_iter()
+            .flat_map(|cond| flatten_answer_tree(interner, predicate, cond))
+            .collect(),
+        Condition::Immutable { ty } => {
+            let trait_ref = ty::TraitRef::new(
+                interner,
+                interner.require_trait_lang_item(SolverTraitLangItem::Freeze),
+                [I::GenericArg::from(ty)],
+            );
+            thin_vec![trait_ref.upcast(interner)]
+        }
+        Condition::Outlives { long, short } => {
+            let outlives = ty::OutlivesClause(long, short);
+            thin_vec![outlives.upcast(interner)]
+        }
+        Condition::Transmutable { src, dst } => {
+            let transmute_trait = predicate.def_id();
+            let assume = predicate.trait_ref.args.const_at(2);
+            let trait_ref = ty::TraitRef::new(
+                interner,
+                transmute_trait,
+                [I::GenericArg::from(dst), I::GenericArg::from(src), I::GenericArg::from(assume)],
+            );
+            thin_vec![trait_ref.upcast(interner)]
+        }
+    }
 }

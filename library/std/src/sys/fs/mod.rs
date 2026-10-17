@@ -47,9 +47,6 @@ cfg_select! {
         mod vexos;
         use vexos as imp;
     }
-    target_vendor = "apple" => {
-        mod darwin;
-    }
     _ => {
         mod unsupported;
         use unsupported as imp;
@@ -79,6 +76,10 @@ pub fn remove_file(path: &Path) -> io::Result<()> {
 
 pub fn rename(old: &Path, new: &Path) -> io::Result<()> {
     with_native_path(old, &|old| with_native_path(new, &|new| imp::rename(old, new)))
+}
+
+pub fn rename_noreplace(old: &Path, new: &Path) -> io::Result<()> {
+    with_native_path(old, &|old| with_native_path(new, &|new| imp::rename_noreplace(old, new)))
 }
 
 pub fn remove_dir(path: &Path) -> io::Result<()> {
