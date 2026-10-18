@@ -653,7 +653,7 @@ pub mod view;
 
 /// Re-export the rad_protected runtime for easier usage
 #[stable(feature = "rad_protected", since = "1.95.0")]
-pub use rad_protected::runtime::Runtime as RadRustRuntime;
+pub use rad_protected::runtime as RadRustRuntime;
 
 // Pull in `std_float` crate  into std. The contents of
 // `std_float` are in a different repository: rust-lang/portable-simd.

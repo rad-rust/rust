@@ -18,6 +18,7 @@ use rustc_span::Spanned;
 use crate::PassPolicy;
 use crate::coroutine::layout::{LivenessInfo, locals_live_across_suspend_points};
 use crate::rad_statement_ids::{id_at, id_label, repeated_ids, unnumbered};
+use rustc_abi::FieldIdx;
 
 pub(super) struct RadWriteSets;
 
@@ -288,6 +289,13 @@ impl<'tcx> Analysis<'_, 'tcx> {
         Suspension { end, segment, saved, writes, not_saved, objects }
     }
 
+    /// Helper to find the FieldIdx of a Local, see CoroutineSavedLocals::get
+    fn saved_field(saved: &DenseBitSet<Local>, local: Local) -> FieldIdx {
+        FieldIdx::from_usize(
+            saved.iter().take_while(|&l| l < local).count()
+        )
+    }
+
     /// Find the saved local or upvar that holds `place` if it's stored in the future here
     fn object(&self, place: Place<'_>, saved: &DenseBitSet<Local>) -> Option<CheckpointObject> {
         if !in_future(place, saved) {
@@ -300,7 +308,11 @@ impl<'tcx> Analysis<'_, 'tcx> {
             };
             return Some(CheckpointObject::Upvar(field));
         }
-        Some(CheckpointObject::Saved(self.liveness.saved_locals.get(place.local)?))
+        
+        let field = Self::saved_field(saved, place.local);
+        let slot = self.liveness.saved_locals.get(place.local)?;
+
+        Some(CheckpointObject::Saved(field, slot))
     }
 
     /// Figure out which objects an instruction can write through its pointers
@@ -695,7 +707,7 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, plan: &CheckpointPlan<'tcx>
             .map(|(object, depth)| {
                 let object = match object {
                     CheckpointObject::Discriminant => "state".to_string(),
-                    CheckpointObject::Saved(slot) => {
+                    CheckpointObject::Saved(_, slot) => {
                         format!("{slot:?} ({:?})", plan.slot_locals[*slot])
                     }
                     CheckpointObject::Upvar(Some(field)) => format!("upvar {field:?}"),

@@ -216,7 +216,7 @@ pub enum CheckpointObject {
     /// The coroutine's state, which `StateTransform` writes at every suspension
     Discriminant,
     /// A local `StateTransform` stores in the future, as slot `_sN` of the coroutine layout
-    Saved(CoroutineSavedLocal),
+    Saved(FieldIdx, CoroutineSavedLocal),
     /// A captured upvar (an argument of the async fn), or all of them if the field is unknown
     Upvar(Option<FieldIdx>),
     /// Memory outside the future, reached through a reference
