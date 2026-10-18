@@ -1,6 +1,7 @@
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
+use libc;
 
 #[stable(feature = "rad_protected", since = "1.95.0")]
 pub struct Runtime;
@@ -8,9 +9,32 @@ pub struct Runtime;
 impl Runtime {
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "checkpoint"]
-    // TODO: implement Runtime::checkpoint
-    pub fn checkpoint(_site: u32, _regions: &[(*mut u8, usize)]) {
-        todo!();
+    pub fn checkpoint(site: u32, regions: &[(*mut u8, usize)]) {
+        unsafe {
+            libc::printf(
+                c"checkpoint: state %u, %zu regions\n".as_ptr(),
+                site as libc::c_uint,
+                regions.len() as libc::size_t,
+            );
+
+            for (i, &(ptr, len)) in regions.iter().enumerate() {
+                libc::printf(
+                    c"  region %zu: %zu bytes at %p\n".as_ptr(),
+                    i as libc::size_t,
+                    len as libc::size_t,
+                    ptr,
+                );
+
+                let bytes = core::slice::from_raw_parts(ptr, len);
+                libc::printf(c"    bytes: ".as_ptr());
+
+                for &byte in bytes {
+                    libc::printf(c"%02x ".as_ptr(), byte as libc::c_uint);
+                }
+
+                libc::printf(c"\n".as_ptr());
+            }
+        }
     }
 }
 
