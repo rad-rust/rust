@@ -247,6 +247,17 @@ pub struct BodyLoans<'tcx> {
     pub loans: IndexVec<LoanId, Option<(Place<'tcx>, Mutability)>>,
     /// Instructions that need an alias analysis and the liveness info
     pub instructions: FxIndexMap<StatementId, InstructionLoans>,
+    /// For a `#[rad::checkpoint]` fn: what callers can assume its calls write
+    pub summary: Option<RadWriteSummary>,
+}
+
+/// The memory that a call to a `#[rad::checkpoint]` fn can write.
+#[derive(Clone, Debug, TyEncodable, TyDecodable, StableHash)]
+pub struct RadWriteSummary {
+    /// The lifetimes of the argument types that the callee can write through.
+    pub written: DenseBitSet<usize>,
+    /// Whether the callee can also write memory that none of its arguments lead to.
+    pub other: bool,
 }
 
 /// Instructions that are writes through a pointer, calls, drops or suspensions
@@ -258,4 +269,6 @@ pub struct InstructionLoans {
     pub reachable: Option<DenseBitSet<LoanId>>,
     /// Whether those pointers can also hold memory not borrowed in this body
     pub outside: bool,
+    /// Whether the instruction is a call that used the callee's [`RadWriteSummary`]
+    pub summary: bool,
 }

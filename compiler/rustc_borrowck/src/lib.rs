@@ -106,7 +106,12 @@ impl<'tcx> TyCtxtConsts<'tcx> {
 }
 
 pub fn provide(providers: &mut Providers) {
-    *providers = Providers { mir_borrowck, mir_borrowck_implied_outlives_bounds, ..*providers };
+    *providers = Providers {
+        mir_borrowck,
+        mir_borrowck_implied_outlives_bounds,
+        rad_write_summary: polonius::rad_write_summary,
+        ..*providers
+    };
 }
 
 /// Provider for `query mir_borrowck`. Unlike `typeck`, this must

@@ -1621,6 +1621,11 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
                     self.encode_info_for_assoc_item(def_id.expect_local());
                 }
             }
+            if let DefKind::Fn | DefKind::AssocFn = def_kind
+                && let Some(summary) = self.tcx.rad_write_summary(def_id)
+            {
+                record_some_lazy!(self.tables.rad_write_summary[local_id] <- summary);
+            }
             if let DefKind::Closure | DefKind::SyntheticCoroutineBody = def_kind
                 && let Some(coroutine_kind) = self.tcx.coroutine_kind(def_id)
             {

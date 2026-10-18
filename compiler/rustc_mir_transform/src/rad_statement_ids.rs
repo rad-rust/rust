@@ -1,9 +1,14 @@
 use either::Either;
 use rustc_data_structures::fx::FxIndexMap;
+use rustc_hir::intravisit::{self, Visitor};
+use rustc_hir::{self as hir, BlockCheckMode, HeaderSafety, Safety, UnsafeSource};
+use rustc_middle::hir::nested_filter;
 use rustc_middle::mir::{Body, Location, StatementId, TerminatorKind};
 use rustc_middle::ty::TyCtxt;
+use rustc_span::Span;
 
 use crate::PassPolicy;
+use crate::diagnostics::RadUnsafe;
 
 /// Numbers every statement and terminator before borrowck clones the body, so borrowck's
 /// results can be attached to exactly the same instructions in later MIR.
@@ -16,10 +21,27 @@ impl<'tcx> crate::MirPass<'tcx> for RadStatementIds {
     }
 
     fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
-        // Only bodies marked `#[rad::checkpoint]` are analyzed; the others need no ids.
-        if !tcx.rad_checkpointed(body.source.def_id()) {
+        // Only bodies marked `#[rad::checkpoint]` are analyzed.
+        let def_id = body.source.def_id();
+        if !tcx.rad_checkpointed(def_id) {
             return;
         }
+
+        // Make sure that none of the marked fns have `unsafe`.
+        if let Some(local) = def_id.as_local()
+            && !tcx.is_typeck_child(def_id)
+        {
+            let item = tcx.def_span(local);
+            if let Some(sig) = tcx.hir_fn_sig_by_hir_id(tcx.local_def_id_to_hir_id(local))
+                && let HeaderSafety::Normal(Safety::Unsafe) = sig.header.safety
+            {
+                tcx.dcx().emit_err(RadUnsafe { span: sig.span, item: None });
+            }
+            if let Some(hir_body) = tcx.hir_maybe_body_owned_by(local) {
+                UnsafeBlocks { tcx, item }.visit_body(hir_body);
+            }
+        }
+
         let mut ids = (0..).map(StatementId::from_usize);
         for data in body.basic_blocks.as_mut_preserves_cfg() {
             for statement in &mut data.statements {
@@ -27,6 +49,34 @@ impl<'tcx> crate::MirPass<'tcx> for RadStatementIds {
             }
             data.terminator_mut().id = ids.next();
         }
+    }
+}
+
+/// Finds the `unsafe` blocks the user wrote in a body
+struct UnsafeBlocks<'tcx> {
+    tcx: TyCtxt<'tcx>,
+    /// The marked fn, for the error's label
+    item: Span,
+}
+
+impl<'tcx> Visitor<'tcx> for UnsafeBlocks<'tcx> {
+    // Closures and `async` blocks are nested bodies of the fn; nested items are other functions
+    type NestedFilter = nested_filter::OnlyBodies;
+
+    fn maybe_tcx(&mut self) -> TyCtxt<'tcx> {
+        self.tcx
+    }
+
+    fn visit_block(&mut self, block: &'tcx hir::Block<'tcx>) {
+        // Skip blocks the compiler made and `unsafe` that comes from `#[allow_internal_unsafe]`
+        // or from another crate's macro (such as `pin!`).
+        if let BlockCheckMode::UnsafeBlock(UnsafeSource::UserProvided) = block.rules
+            && !block.span.allows_unsafe()
+            && !block.span.in_external_macro(self.tcx.sess.source_map())
+        {
+            self.tcx.dcx().emit_err(RadUnsafe { span: block.span, item: Some(self.item) });
+        }
+        intravisit::walk_block(self, block);
     }
 }
 

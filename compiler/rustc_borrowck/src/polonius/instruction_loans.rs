@@ -1,11 +1,16 @@
-use rustc_data_structures::fx::FxIndexMap;
+use rustc_data_structures::fx::{FxHashSet, FxIndexMap};
+use rustc_hir as hir;
+use rustc_hir::def::DefKind;
+use rustc_hir::def_id::{DefId, LocalDefId};
+use rustc_hir::intravisit::{self, Visitor};
 use rustc_index::bit_set::DenseBitSet;
 use rustc_index::{Idx, IndexVec};
+use rustc_middle::hir::nested_filter;
 use rustc_middle::mir::{
-    Body, BodyLoans, BorrowKind, InstructionLoans, LoanId, Location, Mutability, Place,
-    ProjectionElem, StatementId, StatementKind, TerminatorKind,
+    Body, BodyLoans, BorrowKind, InstructionLoans, LoanId, Location, Mutability, Operand, Place,
+    ProjectionElem, RadWriteSummary, StatementId, StatementKind, TerminatorKind,
 };
-use rustc_middle::ty::{self, RegionVid, Ty, TyCtxt};
+use rustc_middle::ty::{self, GenericArgKind, RegionVid, Ty, TyCtxt, TypeVisitableExt};
 use rustc_mir_dataflow::points::{DenseLocationMap, PointIndex};
 
 use super::liveness::LivenessSource;
@@ -30,12 +35,15 @@ struct Site {
     used: Option<Vec<(RegionVid, bool)>>,
     /// The loans that reached one of those lifetimes here
     loans: DenseBitSet<LoanId>,
+    /// For a call that used the callee's summary: whether the callee also writes memory that none
+    /// of the arguments lead to. `None` if no summary was used
+    other: Option<bool>,
 }
 
 impl Site {
     fn new(id: StatementId, used: Option<Vec<RegionVid>>, num_loans: usize) -> Self {
         let used = used.map(|used| used.into_iter().map(|region| (region, false)).collect());
-        Site { id, used, loans: DenseBitSet::new_empty(num_loans) }
+        Site { id, used, loans: DenseBitSet::new_empty(num_loans), other: None }
     }
 }
 
@@ -87,10 +95,30 @@ impl SiteLoans {
             // Add the terminator too if it can do a write
             let terminator = data.terminator();
             let Some(id) = terminator.id else { continue };
+            let mut other = None;
             let used = match &terminator.kind {
-                TerminatorKind::Call { args, destination, .. } => {
+                // Use the callee's write summary if it has one, or else every lifetime in the
+                // arguments
+                TerminatorKind::Call { func, args, destination, .. } => {
                     let mut used = pointer(*destination);
-                    used.extend(args.iter().flat_map(|arg| regions(arg.node.ty(body, tcx))));
+                    let arg_regions: Vec<RegionVid> =
+                        args.iter().flat_map(|arg| regions(arg.node.ty(body, tcx))).collect();
+                    match callee_summary(tcx, body, func)
+                        .filter(|summary| summary.written.domain_size() == arg_regions.len())
+                    {
+                        // Only the lifetimes the callee writes through.
+                        Some(summary) => {
+                            used.extend(
+                                arg_regions
+                                    .into_iter()
+                                    .enumerate()
+                                    .filter(|&(k, _)| summary.written.contains(k))
+                                    .map(|(_, region)| region),
+                            );
+                            other = Some(summary.other);
+                        }
+                        None => used.extend(arg_regions),
+                    }
                     Some(used)
                 }
                 TerminatorKind::TailCall { args, .. } => {
@@ -102,7 +130,9 @@ impl SiteLoans {
                 _ => continue,
             };
             let point = location_map.point_from_location(body.terminator_loc(block));
-            sites.insert(point, Site::new(id, used, num_loans));
+            let mut site = Site::new(id, used, num_loans);
+            site.other = other;
+            sites.insert(point, site);
         }
         SiteLoans { sites }
     }
@@ -119,7 +149,7 @@ impl SiteLoans {
     }
 }
 
-/// A traverse function for the borrow checker that also records which loans reach the regions each instruction uses
+/// A traverse functio that also records which loans reach the regions each instruction uses
 pub(super) fn traverse<'tcx>(
     graph: &LocalizedConstraintGraph,
     tcx: TyCtxt<'tcx>,
@@ -207,14 +237,177 @@ pub(crate) fn instruction_loans<'tcx>(
                     reachable.insert(loan);
                 }
                 // Check if the reference points to memory that we didn't track
-                let outside =
-                    used.iter().any(|&(region, reached)| !reached || from_outside.contains(region));
+                let outside = site.other == Some(true)
+                    || used
+                        .iter()
+                        .any(|&(region, reached)| !reached || from_outside.contains(region));
                 (Some(reachable), outside)
             }
         };
-        instructions.insert(site.id, InstructionLoans { live, reachable, outside });
+        let summary = site.other.is_some();
+        instructions.insert(site.id, InstructionLoans { live, reachable, outside, summary });
     }
-    Some(BodyLoans { loans, instructions })
+
+    // Only a fn's own body is called directly. Closures and `async` blocks are called through
+    // traits, which have no summary.
+    let def = body.source.def_id();
+    let summary = (body.coroutine.is_none() && !tcx.is_typeck_child(def))
+        .then(|| write_summary(tcx, body, regioncx, site_loans, &from_outside));
+    Some(BodyLoans { loans, instructions, summary })
+}
+
+/// Generates the write summary of this body, which lists the lifetimes of its arguments that it writes through.
+fn write_summary<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    regioncx: &RegionInferenceContext<'tcx>,
+    site_loans: &SiteLoans,
+    from_outside: &DenseBitSet<RegionVid>,
+) -> RadWriteSummary {
+    let universal_regions = regioncx.universal_regions();
+    let params: Vec<RegionVid> = body
+        .args_iter()
+        .flat_map(|arg| regions_in(tcx, universal_regions, body.local_decls[arg].ty))
+        .collect();
+
+    // Link each lifetime to the lifetimes whose references can flow into it
+    let num_regions = regioncx.definitions.len();
+    let mut flows_from: IndexVec<RegionVid, Vec<RegionVid>> =
+        IndexVec::from_elem_n(Vec::new(), num_regions);
+    for constraint in regioncx.outlives_constraints() {
+        flows_from[constraint.sub].push(constraint.sup);
+    }
+
+    // From the lifetimes that each site writes through, find memory that the caller can't name
+    let mut written = DenseBitSet::new_empty(num_regions);
+    let mut stack = Vec::new();
+    let mut other = false;
+    for site in site_loans.sites.values() {
+        other |= site.other == Some(true);
+        for &(region, reached) in site.used.iter().flatten() {
+            // Neither a loan of this body nor an argument: memory that the caller can't name
+            other |= !reached && !from_outside.contains(region);
+            if written.insert(region) {
+                stack.push(region);
+            }
+        }
+    }
+
+    // Mark every lifetime whose references can flow into a written one
+    while let Some(region) = stack.pop() {
+        for &source in &flows_from[region] {
+            if written.insert(source) {
+                stack.push(source);
+            }
+        }
+    }
+    other |= written.contains(universal_regions.fr_static);
+
+    // Match these regions to the original arguments
+    let mut written_params = DenseBitSet::new_empty(params.len());
+    for (k, &region) in params.iter().enumerate() {
+        if written.contains(region) {
+            written_params.insert(k);
+        }
+    }
+    RadWriteSummary { written: written_params, other }
+}
+
+/// Provider for `rad_write_summary`
+pub(crate) fn rad_write_summary(tcx: TyCtxt<'_>, def: LocalDefId) -> Option<&RadWriteSummary> {
+    if !matches!(tcx.def_kind(def), DefKind::Fn | DefKind::AssocFn)
+        || !tcx.rad_checkpointed(def.to_def_id())
+    {
+        return None;
+    }
+    tcx.mir_borrowck(def).ok()?.loans.get(&def)?.summary.as_ref()
+}
+
+/// The summary of the fn that `func` calls, if the call site can use it
+fn callee_summary<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    func: &Operand<'tcx>,
+) -> Option<&'tcx RadWriteSummary> {
+    let (callee, args) = func.const_fn_def()?;
+    // Which impl a trait method calls is only known after monomorphization
+    if tcx.trait_of_assoc(callee).is_some() {
+        return None;
+    }
+    // A type parameter can be a reference, which the generic body can't see writes through
+    if args
+        .iter()
+        .any(|arg| !matches!(arg.kind(), GenericArgKind::Lifetime(_)) && arg.has_free_regions())
+    {
+        return None;
+    }
+
+    if let Some(local) = callee.as_local() {
+        if !tcx.rad_checkpointed(callee) {
+            return None;
+        }
+        // A fn in another crate can't call back into this one. A local one is only used if it
+        // can't reach this body, since its summary needs its borrowck to finish first.
+        let root = tcx.typeck_root_def_id_local(body.source.def_id().expect_local());
+        if reaches(tcx, local, root) {
+            return None;
+        }
+    }
+
+    tcx.rad_write_summary(callee)
+}
+
+/// Whether `from` can call `to` through direct calls of local `#[rad::checkpoint]` fns, which are
+/// the calls that use a summary
+fn reaches(tcx: TyCtxt<'_>, from: LocalDefId, to: LocalDefId) -> bool {
+    let mut seen = FxHashSet::default();
+    let mut stack = vec![from];
+    while let Some(def) = stack.pop() {
+        if def == to {
+            return true;
+        }
+        if !seen.insert(def) {
+            continue;
+        }
+        let Some(hir_body) = tcx.hir_maybe_body_owned_by(def) else { continue };
+        let mut callees = Callees { tcx, typeck: tcx.typeck(def), found: Vec::new() };
+        callees.visit_body(hir_body);
+        stack.extend(callees.found);
+    }
+    false
+}
+
+/// Collects the local `#[rad::checkpoint]` fns that a body and its closures call directly
+struct Callees<'tcx> {
+    tcx: TyCtxt<'tcx>,
+    typeck: &'tcx ty::TypeckResults<'tcx>,
+    found: Vec<LocalDefId>,
+}
+
+impl<'tcx> Visitor<'tcx> for Callees<'tcx> {
+    type NestedFilter = nested_filter::OnlyBodies;
+
+    fn maybe_tcx(&mut self) -> TyCtxt<'tcx> {
+        self.tcx
+    }
+
+    fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
+        let callee: Option<DefId> = match expr.kind {
+            hir::ExprKind::Call(func, _) => match *self.typeck.expr_ty_adjusted(func).kind() {
+                ty::FnDef(def_id, _) => Some(def_id),
+                _ => None,
+            },
+            hir::ExprKind::MethodCall(..) => self.typeck.type_dependent_def_id(expr.hir_id),
+            _ => None,
+        };
+        if let Some(callee) = callee
+            && let Some(local) = callee.as_local()
+            && self.tcx.rad_checkpointed(callee)
+        {
+            self.found.push(local);
+        }
+        intravisit::walk_expr(self, expr);
+    }
 }
 
 /// Build a map of all loans in the body and the borrow checker's numbering

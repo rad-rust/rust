@@ -35,6 +35,13 @@ impl<'tcx> crate::MirPass<'tcx> for RadWriteSets {
         if body.source.promoted.is_some() || !tcx.rad_checkpointed(body.source.def_id()) {
             return;
         }
+        let def_id = body.source.def_id();
+        if body.coroutine.is_none()
+            && !tcx.is_typeck_child(def_id)
+            && !tcx.asyncness(def_id).is_async()
+        {
+            with_no_trimmed_paths!(print_summary(tcx, body));
+        }
         let Some(plan) = analyze(tcx, body) else { return };
         // Keep what to copy at each `.await` for the pass inserting the checkpoints
         if let Some(coroutine) = body.coroutine.as_mut() {
@@ -523,11 +530,17 @@ impl<'tcx> Analysis<'_, 'tcx> {
             ) => Some(self.pointer_holder(place, saved)?.slot().into_iter().collect()),
             // A call can write through any reference among its arguments, or its destination's
             Effect::Call => {
-                let TerminatorKind::Call { args, destination, .. } =
+                let TerminatorKind::Call { func, args, destination, .. } =
                     &self.body[location.block].terminator().kind
                 else {
                     return None;
                 };
+                // The callee also writes memory that isn't from an argument
+                if let Some((callee, _)) = func.const_fn_def()
+                    && self.tcx.rad_write_summary(callee).is_some_and(|summary| summary.other)
+                {
+                    return None;
+                }
                 let mut holders = Vec::new();
                 for arg in args {
                     // Only types with lifetimes hold references (regions are erased here)
@@ -787,6 +800,26 @@ fn on_cycle(body: &Body<'_>, block: BasicBlock) -> bool {
     false
 }
 
+/// Prints the summary that calls of a `#[rad::checkpoint]` fn use
+fn print_summary<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
+    let def_id = body.source.def_id();
+    eprintln!("=== rad write summary: {} ===", tcx.def_path_str(def_id));
+    let Some(summary) = tcx.rad_write_summary(def_id) else {
+        eprintln!("  none (needs `-Zpolonius=next`)");
+        return;
+    };
+    let args: Vec<String> =
+        body.args_iter().map(|arg| format!("{arg:?}: {}", body.local_decls[arg].ty)).collect();
+    eprintln!("  args: {}", args.join(", "));
+    let written: Vec<String> = summary.written.iter().map(|k| k.to_string()).collect();
+    let other = if summary.other { "yes" } else { "no" };
+    eprintln!(
+        "  writes through lifetimes {{{}}} of {}; other memory: {other}",
+        written.join(", "),
+        summary.written.domain_size()
+    );
+}
+
 fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, plan: &CheckpointPlan<'tcx>) {
     eprintln!("=== rad write sets: {} ===", tcx.def_path_str(body.source.def_id()));
     let source_map = tcx.sess.source_map();
@@ -877,7 +910,7 @@ fn print_live_loans<'tcx>(
     saved: &DenseBitSet<Local>,
 ) {
     match reach.instruction {
-        Some(InstructionLoans { live, reachable: Some(reachable), outside }) => {
+        Some(InstructionLoans { live, reachable: Some(reachable), outside, summary }) => {
             let reachable: Vec<String> = reachable
                 .iter()
                 .filter_map(|loan| {
@@ -886,8 +919,9 @@ fn print_live_loans<'tcx>(
                 })
                 .collect();
             let outside = if *outside { " + outside" } else { "" };
+            let summary = if *summary { ", callee summary" } else { "" };
             eprintln!(
-                "                 reaches: {{{}}}{outside} (of {} live)",
+                "                 reaches: {{{}}}{outside} (of {} live{summary})",
                 reachable.join(", "),
                 live.count()
             );

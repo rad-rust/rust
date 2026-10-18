@@ -21,6 +21,18 @@ pub(crate) struct UnconditionalRecursion {
 }
 
 #[derive(Diagnostic)]
+#[diag("`unsafe` code in a `#[rad::checkpoint]` function")]
+#[note("checkpoints cannot reason about writes through raw pointers")]
+pub(crate) struct RadUnsafe {
+    #[primary_span]
+    #[label("`unsafe` here")]
+    pub span: Span,
+    /// The marked fn, unless the `unsafe` is its own header
+    #[label("this function has `#[rad::checkpoint]`")]
+    pub item: Option<Span>,
+}
+
+#[derive(Diagnostic)]
 #[diag("`{$callee}` is incompatible with `#[rustc_force_inline]`")]
 #[note("incompatible due to: {$reason}")]
 pub(crate) struct InvalidForceInline {

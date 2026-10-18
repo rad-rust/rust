@@ -20,6 +20,7 @@ rustc_arena::declare_arena! {
     steal_thir: rustc_data_structures::steal::Steal<rustc_middle::thir::Thir<'tcx>>,
     steal_mir: rustc_data_structures::steal::Steal<rustc_middle::mir::Body<'tcx>>,
     mir: rustc_middle::mir::Body<'tcx>,
+    rad_write_summary: rustc_middle::mir::RadWriteSummary,
     steal_promoted:
         rustc_data_structures::steal::Steal<
             rustc_index::IndexVec<

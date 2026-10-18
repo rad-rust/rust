@@ -1272,6 +1272,13 @@ rustc_queries! {
         desc { "borrow-checking `{}`", tcx.def_path_str(key) }
     }
 
+    /// Memory that a `#[rad::checkpoint]` fn call can write to. Other crates read
+    /// it from the metadata, because the attribute isn't encoded.
+    query rad_write_summary(key: DefId) -> Option<&'tcx mir::RadWriteSummary> {
+        desc { "finding what `{}` writes", tcx.def_path_str(key) }
+        separate_provide_extern
+    }
+
     /// Gets a complete map from all types to their inherent impls.
     ///
     /// <div class="warning">
