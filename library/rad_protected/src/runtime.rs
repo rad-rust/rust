@@ -9,7 +9,7 @@ pub struct Runtime;
 impl Runtime {
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "checkpoint"]
-    pub fn checkpoint(site: u32, regions: &[(*mut u8, usize)]) {
+    pub fn checkpoint(site: u32, regions: &[(*mut u8, usize, bool)]) {
         unsafe {
             libc::printf(
                 c"checkpoint: state %u, %zu regions\n".as_ptr(),
@@ -17,12 +17,13 @@ impl Runtime {
                 regions.len() as libc::size_t,
             );
 
-            for (i, &(ptr, len)) in regions.iter().enumerate() {
+            for (i, &(ptr, len, compare)) in regions.iter().enumerate() {
                 libc::printf(
-                    c"  region %zu: %zu bytes at %p\n".as_ptr(),
+                    c"  region %zu: %zu bytes at %p %s\n".as_ptr(),
                     i as libc::size_t,
                     len as libc::size_t,
                     ptr,
+                    if compare { c"comparing".as_ptr() } else { c"non-comparing".as_ptr() }
                 );
 
                 let bytes = core::slice::from_raw_parts(ptr, len);

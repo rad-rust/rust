@@ -77,10 +77,14 @@ fn emit_checkpoint<'tcx>(
         let scalar = Scalar::from_target_usize(v, &tcx);
         Operand::const_from_scalar(tcx, tcx.types.usize, scalar, span)
     };
+    let bool_const = |b: bool| {
+        let scalar = Scalar::from_bool(b);
+        Operand::const_from_scalar(tcx, tcx.types.bool, scalar, span)
+    };
 
-    // let regions: [(*mut u8, usize); n];
+    // let regions: [(*mut u8, usize, bool); n];
     let u8_ptr = Ty::new_ptr(tcx, tcx.types.u8, Mutability::Mut);
-    let pair_ty = Ty::new_tup(tcx, &[u8_ptr, tcx.types.usize]);
+    let pair_ty = Ty::new_tup(tcx, &[u8_ptr, tcx.types.usize, tcx.types.bool]);
     let array_ty = Ty::new_array(tcx, pair_ty, n);
     let array = new_local(body, array_ty);
 
@@ -92,9 +96,13 @@ fn emit_checkpoint<'tcx>(
         let ptr = new_local(body, u8_ptr);
         assign(ptr.into(), Rvalue::Cast(CastKind::PtrToPtr, Operand::Move(raw.into()), u8_ptr));
 
-        // regions[i] = (_2, size);
+        // regions[i] = (_2, size, compare);
         let pair = new_local(body, pair_ty);
-        let fields: IndexVec<_, _> = IndexVec::from_raw(vec![Operand::Move(ptr.into()), usize_const(region.size)]);
+        let fields: IndexVec<_, _> = IndexVec::from_raw(vec![
+            Operand::Move(ptr.into()), 
+            usize_const(region.size),
+            bool_const(region.compare),
+        ]);
         assign(pair.into(), Rvalue::Aggregate(Box::new(AggregateKind::Tuple), fields));
         let element = Place::from(array).project_deeper(
             &[ProjectionElem::ConstantIndex { offset: i as u64, min_length: n, from_end: false }],
