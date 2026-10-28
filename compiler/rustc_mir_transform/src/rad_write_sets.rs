@@ -480,8 +480,16 @@ impl<'tcx> Analysis<'_, 'tcx> {
         saved: &DenseBitSet<Local>,
         objects: &mut FxIndexMap<CheckpointObject, Depth>,
     ) -> Option<Reach<'tcx>> {
-        // Without borrowck's results, the pointers can hold any saved local or memory
-        let Some(loans) = self.loans.filter(|_| !matches!(effect, Effect::Intrinsic)) else {
+        let span = self.body.source_info(location).span;
+        // Catches a raw pointer write that borrowck has no loans for. It means `LowerIntrinsics`
+        // or the inliner now runs before this pass, or `RadStatementIds` missed an `unsafe` block.
+        if let Effect::Intrinsic = effect {
+            span_bug!(span, "intrinsic write in a `#[rad::checkpoint]` body");
+        }
+        // Without borrowck's results, the pointers can hold any saved local or memory. That only
+        // happens without `-Zpolonius=next`, which `RadStatementIds` already reported.
+        let Some(loans) = self.loans else {
+            self.tcx.dcx().span_delayed_bug(span, "no borrowck results for a marked body");
             for local in saved.iter() {
                 if let Some(object) = self.object(local.into(), saved) {
                     record(objects, object, Depth::Shallow);
@@ -493,6 +501,9 @@ impl<'tcx> Analysis<'_, 'tcx> {
 
         let instruction = id_at(self.body, location).and_then(|id| loans.instructions.get(&id));
         let targets = targets(self.tcx, self.body, loans, instruction);
+        if targets.fallback {
+            span_bug!(span, "no borrowck result for an instruction of a marked body");
+        }
         // Pointer points to objects in the future, a shallow copy
         for &place in &targets.places {
             if let Some(object) = self.object(place, saved) {

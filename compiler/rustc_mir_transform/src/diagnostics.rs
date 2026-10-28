@@ -33,6 +33,53 @@ pub(crate) struct RadUnsafe {
 }
 
 #[derive(Diagnostic)]
+#[diag("`#[rad::checkpoint]` requires `-Zpolonius=next`")]
+#[note("checkpoints use the loans that only `-Zpolonius=next` records")]
+pub(crate) struct RadNeedsPolonius {
+    #[primary_span]
+    #[label("this function has `#[rad::checkpoint]`")]
+    pub span: Span,
+}
+
+#[derive(Diagnostic)]
+#[diag("interior mutability in a `#[rad::checkpoint]` function")]
+#[note("`{$ty}` can be changed through a shared reference, which checkpoints do not support")]
+pub(crate) struct RadInteriorMut<'tcx> {
+    #[primary_span]
+    #[label("this has type `{$ty}`")]
+    pub span: Span,
+    #[label("this function has `#[rad::checkpoint]`")]
+    pub item: Span,
+    pub ty: Ty<'tcx>,
+}
+
+#[derive(Diagnostic)]
+#[diag("static with interior mutability in a `#[rad::checkpoint]` function")]
+#[note(
+    "checkpoints do not cover statics; keep task state in the task, and share it through a mailbox"
+)]
+pub(crate) struct RadStatic<'tcx> {
+    #[primary_span]
+    #[label("this static has type `{$ty}`")]
+    pub span: Span,
+    #[label("this function has `#[rad::checkpoint]`")]
+    pub item: Span,
+    pub ty: Ty<'tcx>,
+}
+
+#[derive(Diagnostic)]
+#[diag("heap type in a `#[rad::checkpoint]` function")]
+#[note("`#[rad::checkpoint]` tasks are `no_std` and have no allocator")]
+pub(crate) struct RadHeap<'tcx> {
+    #[primary_span]
+    #[label("this has type `{$ty}`")]
+    pub span: Span,
+    #[label("this function has `#[rad::checkpoint]`")]
+    pub item: Span,
+    pub ty: Ty<'tcx>,
+}
+
+#[derive(Diagnostic)]
 #[diag("`{$callee}` is incompatible with `#[rustc_force_inline]`")]
 #[note("incompatible due to: {$reason}")]
 pub(crate) struct InvalidForceInline {

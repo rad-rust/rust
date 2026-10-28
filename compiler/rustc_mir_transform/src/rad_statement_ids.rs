@@ -1,14 +1,15 @@
 use either::Either;
-use rustc_data_structures::fx::FxIndexMap;
+use rustc_data_structures::fx::{FxHashSet, FxIndexMap};
+use rustc_hir::def::{DefKind, Res};
 use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::{self as hir, BlockCheckMode, HeaderSafety, Safety, UnsafeSource};
 use rustc_middle::hir::nested_filter;
 use rustc_middle::mir::{Body, Location, StatementId, TerminatorKind};
-use rustc_middle::ty::TyCtxt;
-use rustc_span::Span;
+use rustc_middle::ty::{self, Ty, TyCtxt};
+use rustc_span::{Span, sym};
 
 use crate::PassPolicy;
-use crate::diagnostics::RadUnsafe;
+use crate::diagnostics::{RadHeap, RadInteriorMut, RadNeedsPolonius, RadStatic, RadUnsafe};
 
 /// Numbers every statement and terminator before borrowck clones the body, so borrowck's
 /// results can be attached to exactly the same instructions in later MIR.
@@ -27,7 +28,7 @@ impl<'tcx> crate::MirPass<'tcx> for RadStatementIds {
             return;
         }
 
-        // Make sure that none of the marked fns have `unsafe`.
+        // Make sure that none of the marked fns have `unsafe` or name a static they can change.
         if let Some(local) = def_id.as_local()
             && !tcx.is_typeck_child(def_id)
         {
@@ -38,7 +39,29 @@ impl<'tcx> crate::MirPass<'tcx> for RadStatementIds {
                 tcx.dcx().emit_err(RadUnsafe { span: sig.span, item: None });
             }
             if let Some(hir_body) = tcx.hir_maybe_body_owned_by(local) {
-                UnsafeBlocks { tcx, item }.visit_body(hir_body);
+                ForbiddenCode { tcx, item }.visit_body(hir_body);
+            }
+            // Error out if Polonius borrowck didn't run
+            if !tcx.sess.opts.unstable_opts.polonius.is_next_enabled() {
+                tcx.dcx().emit_err(RadNeedsPolonius { span: item });
+            }
+        }
+
+        // Go through the locals and check for Cells or alloc use. Only a local's own type is checked for them,
+        // so a `&Cell` from an argument is still allowed.
+        let item = tcx.def_span(tcx.typeck_root_def_id(def_id));
+        let typing_env = body.typing_env(tcx);
+        for decl in body.local_decls.iter() {
+            // Skip locals that are .await futures
+            if decl.ty.is_coroutine() {
+                continue;
+            }
+            let span = decl.source_info.span;
+            let ty = decl.ty;
+            if needs_allocator(tcx, ty, &mut FxHashSet::default()) {
+                tcx.dcx().emit_err(RadHeap { span, item, ty });
+            } else if !ty.is_freeze(tcx, typing_env) {
+                tcx.dcx().emit_err(RadInteriorMut { span, item, ty });
             }
         }
 
@@ -52,14 +75,14 @@ impl<'tcx> crate::MirPass<'tcx> for RadStatementIds {
     }
 }
 
-/// Finds the `unsafe` blocks the user wrote in a body
-struct UnsafeBlocks<'tcx> {
+/// Finds the `unsafe` blocks and the statics with interior mutability that the user wrote in a body
+struct ForbiddenCode<'tcx> {
     tcx: TyCtxt<'tcx>,
     /// The marked fn, for the error's label
     item: Span,
 }
 
-impl<'tcx> Visitor<'tcx> for UnsafeBlocks<'tcx> {
+impl<'tcx> Visitor<'tcx> for ForbiddenCode<'tcx> {
     // Closures and `async` blocks are nested bodies of the fn; nested items are other functions
     type NestedFilter = nested_filter::OnlyBodies;
 
@@ -77,6 +100,44 @@ impl<'tcx> Visitor<'tcx> for UnsafeBlocks<'tcx> {
             self.tcx.dcx().emit_err(RadUnsafe { span: block.span, item: Some(self.item) });
         }
         intravisit::walk_block(self, block);
+    }
+
+    fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
+        // Find static expressions that are not macros from another crate's using the HIR
+        if let hir::ExprKind::Path(hir::QPath::Resolved(_, path)) = expr.kind
+            && let Res::Def(DefKind::Static { .. }, static_def) = path.res
+            && !expr.span.in_external_macro(self.tcx.sess.source_map())
+        {
+            let ty = self.tcx.type_of(static_def).instantiate_identity().skip_norm_wip();
+            // Functions marked !Freeze have interior mutability, so throw an error
+            if !ty.is_freeze(self.tcx, ty::TypingEnv::fully_monomorphized()) {
+                self.tcx.dcx().emit_err(RadStatic { span: expr.span, item: self.item, ty });
+            }
+        }
+        intravisit::walk_expr(self, expr);
+    }
+}
+
+/// Catch when `ty` holds a type from `alloc` or `std`
+fn needs_allocator<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, seen: &mut FxHashSet<Ty<'tcx>>) -> bool {
+    // Recursive types such as `struct List { next: Option<&'static List> }` lead back to themselves
+    if !seen.insert(ty) {
+        return false;
+    }
+    match *ty.kind() {
+        ty::Adt(adt, args) => {
+            matches!(tcx.crate_name(adt.did().krate), sym::alloc | sym::std)
+                || adt
+                    .all_fields()
+                    .any(|field| needs_allocator(tcx, field.ty(tcx, args).skip_norm_wip(), seen))
+        }
+        // A heap object that the caller owns is still a heap object
+        ty::Ref(_, inner, _) | ty::Array(inner, _) | ty::Slice(inner) => {
+            needs_allocator(tcx, inner, seen)
+        }
+        ty::Tuple(tys) => tys.iter().any(|ty| needs_allocator(tcx, ty, seen)),
+        // Raw pointers are the trusted base's, and closures and futures have their own bodies
+        _ => false,
     }
 }
 
