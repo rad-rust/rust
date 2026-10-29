@@ -7,8 +7,9 @@ use rustc_index::bit_set::DenseBitSet;
 use rustc_middle::mir::visit::{MutatingUseContext, NonMutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
     AwaitCheckpoints, BasicBlock, Body, BodyLoans, CheckpointObject, CheckpointTable, Depth,
-    InstructionLoans, LoanId, Local, Location, Mutability, NonDivergingIntrinsic, Operand, Place,
-    ProjectionElem, Rvalue, START_BLOCK, Statement, StatementKind, Terminator, TerminatorKind,
+    InstructionLoans, LoanId, Local, Location, Mutability, NonDivergingIntrinsic, Operand,
+    OutsideKind, Place, ProjectionElem, Rvalue, START_BLOCK, Statement, StatementKind, Terminator,
+    TerminatorKind,
 };
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{CAPTURE_STRUCT_LOCAL, TyCtxt, TypeVisitableExt};
@@ -510,8 +511,8 @@ impl<'tcx> Analysis<'_, 'tcx> {
                 record(objects, object, Depth::Shallow);
             }
         }
-        // Pointer points to memory outside the filter
-        if targets.outside {
+        // Pointer points to memory outside the future that the trusted base doesn't restore
+        if targets.outside.is_some_and(OutsideKind::copied) {
             match self.holders(location, effect, saved) {
                 Some(holders) => {
                     for holder in holders {
@@ -548,7 +549,10 @@ impl<'tcx> Analysis<'_, 'tcx> {
                 };
                 // The callee also writes memory that isn't from an argument
                 if let Some((callee, _)) = func.const_fn_def()
-                    && self.tcx.rad_write_summary(callee).is_some_and(|summary| summary.other)
+                    && self
+                        .tcx
+                        .rad_write_summary(callee)
+                        .is_some_and(|summary| summary.other.is_some_and(OutsideKind::copied))
                 {
                     return None;
                 }
@@ -823,7 +827,7 @@ fn print_summary<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
         body.args_iter().map(|arg| format!("{arg:?}: {}", body.local_decls[arg].ty)).collect();
     eprintln!("  args: {}", args.join(", "));
     let written: Vec<String> = summary.written.iter().map(|k| k.to_string()).collect();
-    let other = if summary.other { "yes" } else { "no" };
+    let other = summary.other.map_or_else(|| "no".to_string(), outside_label);
     eprintln!(
         "  writes through lifetimes {{{}}} of {}; other memory: {other}",
         written.join(", "),
@@ -929,7 +933,8 @@ fn print_live_loans<'tcx>(
                     Some(format!("{loan:?} &{}{place:?}", mutability.prefix_str()))
                 })
                 .collect();
-            let outside = if *outside { " + outside" } else { "" };
+            let outside = outside
+                .map_or_else(String::new, |kind| format!(" + outside ({})", outside_label(kind)));
             let summary = if *summary { ", callee summary" } else { "" };
             eprintln!(
                 "                 reaches: {{{}}}{outside} (of {} live{summary})",
@@ -952,7 +957,9 @@ fn print_targets(targets: &Targets<'_>, saved: &DenseBitSet<Local>) {
         .map(|place| format!("{place:?}"))
         .collect();
     let unsaved = targets.places.len() - kept.len();
-    let outside = if targets.outside { " + outside" } else { "" };
+    let outside = targets
+        .outside
+        .map_or_else(String::new, |kind| format!(" + outside ({})", outside_label(kind)));
     let fallback = if targets.fallback { " (fallback)" } else { "" };
     eprintln!(
         "                 targets: {{{}}}{outside}{fallback}, dropped {} unsaved, {} frozen",
@@ -962,12 +969,24 @@ fn print_targets(targets: &Targets<'_>, saved: &DenseBitSet<Local>) {
     );
 }
 
+/// How the trace names a kind of outside memory
+fn outside_label(kind: OutsideKind) -> String {
+    let name = match kind {
+        OutsideKind::Token => "token",
+        OutsideKind::ReadOnly => "read-only",
+        OutsideKind::Kernel => "kernel",
+        OutsideKind::Exclusive => "exclusive",
+        OutsideKind::Unknown => "unknown",
+    };
+    if kind.copied() { name.to_string() } else { format!("{name}, not copied") }
+}
+
 /// The memory a set of loans can point to
 #[derive(Default)]
 struct Targets<'tcx> {
     places: FxIndexSet<Place<'tcx>>,
     /// Memory this body didn't borrow
-    outside: bool,
+    outside: Option<OutsideKind>,
     /// The instruction had no borrowck result, so every loan still live was used instead
     fallback: bool,
     /// Skip shared loans of `Freeze` data
@@ -992,7 +1011,7 @@ fn targets<'tcx>(
         // Without a result, the pointers can hold any loan still live here.
         Some(InstructionLoans { live, .. }) => {
             targets.fallback = true;
-            targets.outside = true;
+            targets.outside = Some(OutsideKind::Unknown);
             for loan in live.iter() {
                 targets.add(tcx, body, loans, loan);
             }
@@ -1000,7 +1019,7 @@ fn targets<'tcx>(
         // If no result was found above, every loan in the body is marked
         None => {
             targets.fallback = true;
-            targets.outside = true;
+            targets.outside = Some(OutsideKind::Unknown);
             for loan in loans.loans.indices() {
                 targets.add(tcx, body, loans, loan);
             }
@@ -1026,7 +1045,7 @@ impl<'tcx> Targets<'tcx> {
             // Reborrow's loans are a superset of the original's
             Some((base, _)) if base.ty(body, tcx).ty.is_ref() => {}
             // Polonius can't resolve where a Box aliases
-            Some(_) => self.outside = true,
+            Some(_) => self.outside = self.outside.max(Some(OutsideKind::Unknown)),
         }
     }
 }

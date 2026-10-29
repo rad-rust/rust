@@ -5,7 +5,7 @@ use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::{self as hir, BlockCheckMode, HeaderSafety, Safety, UnsafeSource};
 use rustc_middle::hir::nested_filter;
 use rustc_middle::mir::{Body, Location, StatementId, TerminatorKind};
-use rustc_middle::ty::{self, Ty, TyCtxt};
+use rustc_middle::ty::{self, Ty, TyCtxt, TypeVisitableExt};
 use rustc_span::{Span, sym};
 
 use crate::PassPolicy;
@@ -58,9 +58,11 @@ impl<'tcx> crate::MirPass<'tcx> for RadStatementIds {
             }
             let span = decl.source_info.span;
             let ty = decl.ty;
+            // A type parameter can't be proven `Freeze`, so a generic local is left to the callers,
+            // where it is a concrete type
             if needs_allocator(tcx, ty, &mut FxHashSet::default()) {
                 tcx.dcx().emit_err(RadHeap { span, item, ty });
-            } else if !ty.is_freeze(tcx, typing_env) {
+            } else if !ty.has_non_region_param() && !ty.is_freeze(tcx, typing_env) {
                 tcx.dcx().emit_err(RadInteriorMut { span, item, ty });
             }
         }

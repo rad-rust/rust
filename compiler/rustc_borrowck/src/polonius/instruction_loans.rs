@@ -1,3 +1,4 @@
+use rustc_attr_ir::lang_items::LangItem;
 use rustc_data_structures::fx::{FxHashSet, FxIndexMap};
 use rustc_hir as hir;
 use rustc_hir::def::DefKind;
@@ -7,8 +8,9 @@ use rustc_index::bit_set::DenseBitSet;
 use rustc_index::{Idx, IndexVec};
 use rustc_middle::hir::nested_filter;
 use rustc_middle::mir::{
-    Body, BodyLoans, BorrowKind, InstructionLoans, LoanId, Location, Mutability, Operand, Place,
-    ProjectionElem, RadWriteSummary, StatementId, StatementKind, TerminatorKind,
+    Body, BodyLoans, BorrowKind, InstructionLoans, LoanId, Location, Mutability, Operand,
+    OutsideKind, Place, ProjectionElem, RadWriteSummary, StatementId, StatementKind,
+    TerminatorKind,
 };
 use rustc_middle::ty::{self, GenericArgKind, RegionVid, Ty, TyCtxt, TypeVisitableExt};
 use rustc_mir_dataflow::points::{DenseLocationMap, PointIndex};
@@ -31,20 +33,31 @@ pub(super) struct SiteLoans {
 /// A single instruction's lifetimes and loans reaching it
 struct Site {
     id: StatementId,
-    /// Lifetimes of the references the instruction uses and whether any loan reached each one
-    used: Option<Vec<(RegionVid, bool)>>,
+    /// Lifetimes of the references the instruction uses
+    used: Option<Vec<Used>>,
     /// The loans that reached one of those lifetimes here
     loans: DenseBitSet<LoanId>,
-    /// For a call that used the callee's summary: whether the callee also writes memory that none
-    /// of the arguments lead to. `None` if no summary was used
-    other: Option<bool>,
+    /// Whether the instruction is a call that used the callee's summary
+    summary: bool,
+    /// For such a call: the memory that the callee also writes, that none of the arguments lead to
+    other: Option<OutsideKind>,
 }
 
 impl Site {
-    fn new(id: StatementId, used: Option<Vec<RegionVid>>, num_loans: usize) -> Self {
-        let used = used.map(|used| used.into_iter().map(|region| (region, false)).collect());
-        Site { id, used, loans: DenseBitSet::new_empty(num_loans), other: None }
+    fn new(id: StatementId, used: Option<Vec<Used>>, num_loans: usize) -> Self {
+        Site { id, used, loans: DenseBitSet::new_empty(num_loans), summary: false, other: None }
     }
+}
+
+/// A lifetime that an instruction uses
+struct Used {
+    region: RegionVid,
+    /// The memory behind it, for when that memory isn't borrowed in this body
+    kind: OutsideKind,
+    /// The lifetimes in the type behind it
+    inner: Vec<RegionVid>,
+    /// Whether any loan reached it
+    reached: bool,
 }
 
 impl SiteLoans {
@@ -59,6 +72,19 @@ impl SiteLoans {
         let mut sites = FxIndexMap::default();
         // The lifetimes in a type
         let regions = |ty: Ty<'tcx>| regions_in(tcx, universal_regions, ty);
+        // The lifetimes in a type, with the memory behind each
+        let uses = |ty: Ty<'tcx>| {
+            let mut uses = RegionUses::new(tcx, body, universal_regions);
+            uses.walk(ty, false);
+            // Lifetimes that the walk didn't reach, such as a coroutine's parent lifetimes that no
+            // upvar holds, still need their loans
+            for region in regions(ty) {
+                if !uses.found.iter().any(|used| used.region == region) {
+                    uses.push(region, OutsideKind::Unknown, Vec::new());
+                }
+            }
+            uses.found
+        };
         // The lifetimes of the last pointer dereferenced for each Place
         let pointer = |place: Place<'tcx>| {
             place
@@ -67,11 +93,15 @@ impl SiteLoans {
                 .find(|(_, elem)| *elem == ProjectionElem::Deref)
                 .map_or_else(Vec::new, |(base, _)| {
                     let ty = base.ty(body, tcx).ty;
+                    let mut uses = RegionUses::new(tcx, body, universal_regions);
                     match *ty.kind() {
                         // If this is a reference, use the type of the reference target
-                        ty::Ref(region, ..) => vec![universal_regions.to_region_vid(region)],
-                        _ => regions(ty),
+                        ty::Ref(region, inner, mutability) => {
+                            uses.reference(region, inner, mutability, false)
+                        }
+                        _ => uses.all(ty, OutsideKind::Unknown),
                     }
+                    uses.found
                 })
         };
 
@@ -95,7 +125,7 @@ impl SiteLoans {
             // Add the terminator too if it can do a write
             let terminator = data.terminator();
             let Some(id) = terminator.id else { continue };
-            let mut other = None;
+            let mut summary_used = None;
             let used = match &terminator.kind {
                 // Use the callee's write summary if it has one, or else every lifetime in the
                 // arguments
@@ -103,35 +133,40 @@ impl SiteLoans {
                     let mut used = pointer(*destination);
                     let arg_regions: Vec<RegionVid> =
                         args.iter().flat_map(|arg| regions(arg.node.ty(body, tcx))).collect();
+                    let arg_uses = args.iter().flat_map(|arg| uses(arg.node.ty(body, tcx)));
                     match callee_summary(tcx, body, func)
                         .filter(|summary| summary.written.domain_size() == arg_regions.len())
                     {
-                        // Only the lifetimes the callee writes through.
+                        // Only the lifetimes the callee writes through. The summary numbers them
+                        // in `regions_in` order, so match them by region.
                         Some(summary) => {
-                            used.extend(
-                                arg_regions
-                                    .into_iter()
-                                    .enumerate()
-                                    .filter(|&(k, _)| summary.written.contains(k))
-                                    .map(|(_, region)| region),
-                            );
-                            other = Some(summary.other);
+                            let written: FxHashSet<RegionVid> = arg_regions
+                                .into_iter()
+                                .enumerate()
+                                .filter(|&(k, _)| summary.written.contains(k))
+                                .map(|(_, region)| region)
+                                .collect();
+                            used.extend(arg_uses.filter(|used| written.contains(&used.region)));
+                            summary_used = Some(summary.other);
                         }
-                        None => used.extend(arg_regions),
+                        None => used.extend(arg_uses),
                     }
                     Some(used)
                 }
                 TerminatorKind::TailCall { args, .. } => {
-                    Some(args.iter().flat_map(|arg| regions(arg.node.ty(body, tcx))).collect())
+                    Some(args.iter().flat_map(|arg| uses(arg.node.ty(body, tcx))).collect())
                 }
                 // A `Drop` impl can reach whatever the dropped value holds references to.
-                TerminatorKind::Drop { place, .. } => Some(regions(place.ty(body, tcx).ty)),
+                TerminatorKind::Drop { place, .. } => Some(uses(place.ty(body, tcx).ty)),
                 TerminatorKind::Yield { .. } => None,
                 _ => continue,
             };
             let point = location_map.point_from_location(body.terminator_loc(block));
             let mut site = Site::new(id, used, num_loans);
-            site.other = other;
+            if let Some(other) = summary_used {
+                site.summary = true;
+                site.other = other;
+            }
             sites.insert(point, site);
         }
         SiteLoans { sites }
@@ -140,9 +175,9 @@ impl SiteLoans {
     /// Each time Polonius finds a loan, record it in site
     fn record(&mut self, loan: BorrowIndex, node: LocalizedNode) {
         let Some(site) = self.sites.get_mut(&node.point) else { return };
-        for (region, reached) in site.used.iter_mut().flatten() {
-            if *region == node.region {
-                *reached = true;
+        for used in site.used.iter_mut().flatten() {
+            if used.region == node.region {
+                used.reached = true;
                 site.loans.insert(LoanId::new(loan.index()));
             }
         }
@@ -215,6 +250,12 @@ pub(crate) fn instruction_loans<'tcx>(
     };
     let loans = loan_table(tcx, borrow_set);
     let from_outside = outside_regions(tcx, body, regioncx);
+    // Link each lifetime to the lifetimes whose references can flow into it
+    let mut flows_from = IndexVec::from_elem_n(Vec::new(), regioncx.definitions.len());
+    for constraint in regioncx.outlives_constraints() {
+        flows_from[constraint.sub].push(constraint.sup);
+    }
+    let sources = source_regions(tcx, body, universal_regions, regioncx.definitions.len());
 
     let mut instructions = FxIndexMap::default();
     for (&point, site) in &site_loans.sites {
@@ -229,22 +270,26 @@ pub(crate) fn instruction_loans<'tcx>(
         // Build the set of borrows that the pointers in this instruction can hold
         let (reachable, outside) = match &site.used {
             // Suspensions don't write through anything.
-            None => (None, false),
+            None => (None, None),
             Some(used) => {
                 let mut reachable = DenseBitSet::new_empty(loans.len());
                 // Filter out fake borrows
                 for loan in site.loans.iter().filter(|&loan| loans[loan].is_some()) {
                     reachable.insert(loan);
                 }
-                // Check if the reference points to memory that we didn't track
-                let outside = site.other == Some(true)
-                    || used
-                        .iter()
-                        .any(|&(region, reached)| !reached || from_outside.contains(region));
+                // Check if the reference points to memory that we didn't track, and what kind
+                let outside = used
+                    .iter()
+                    .filter(|used| {
+                        !used.reached || flows_in(&flows_from, &sources, used.region, &used.inner)
+                    })
+                    .map(|used| used.kind)
+                    .chain(site.other)
+                    .max();
                 (Some(reachable), outside)
             }
         };
-        let summary = site.other.is_some();
+        let summary = site.summary;
         instructions.insert(site.id, InstructionLoans { live, reachable, outside, summary });
     }
 
@@ -252,7 +297,7 @@ pub(crate) fn instruction_loans<'tcx>(
     // traits, which have no summary.
     let def = body.source.def_id();
     let summary = (body.coroutine.is_none() && !tcx.is_typeck_child(def))
-        .then(|| write_summary(tcx, body, regioncx, site_loans, &from_outside));
+        .then(|| write_summary(tcx, body, regioncx, site_loans, &from_outside, &flows_from));
     Some(BodyLoans { loans, instructions, summary })
 }
 
@@ -263,32 +308,33 @@ fn write_summary<'tcx>(
     regioncx: &RegionInferenceContext<'tcx>,
     site_loans: &SiteLoans,
     from_outside: &DenseBitSet<RegionVid>,
+    flows_from: &IndexVec<RegionVid, Vec<RegionVid>>,
 ) -> RadWriteSummary {
     let universal_regions = regioncx.universal_regions();
     let params: Vec<RegionVid> = body
         .args_iter()
         .flat_map(|arg| regions_in(tcx, universal_regions, body.local_decls[arg].ty))
         .collect();
-
-    // Link each lifetime to the lifetimes whose references can flow into it
     let num_regions = regioncx.definitions.len();
-    let mut flows_from: IndexVec<RegionVid, Vec<RegionVid>> =
-        IndexVec::from_elem_n(Vec::new(), num_regions);
-    for constraint in regioncx.outlives_constraints() {
-        flows_from[constraint.sub].push(constraint.sup);
-    }
+    let mut statics = DenseBitSet::new_empty(num_regions);
+    statics.insert(universal_regions.fr_static);
 
     // From the lifetimes that each site writes through, find memory that the caller can't name
     let mut written = DenseBitSet::new_empty(num_regions);
     let mut stack = Vec::new();
-    let mut other = false;
+    let mut other = None;
     for site in site_loans.sites.values() {
-        other |= site.other == Some(true);
-        for &(region, reached) in site.used.iter().flatten() {
-            // Neither a loan of this body nor an argument: memory that the caller can't name
-            other |= !reached && !from_outside.contains(region);
-            if written.insert(region) {
-                stack.push(region);
+        other = other.max(site.other);
+        for used in site.used.iter().flatten() {
+            // Neither a loan of this body nor an argument, or `'static`: memory that the caller
+            // can't name
+            if !used.reached && !from_outside.contains(used.region)
+                || flows_in(flows_from, &statics, used.region, &used.inner)
+            {
+                other = other.max(Some(used.kind));
+            }
+            if written.insert(used.region) {
+                stack.push(used.region);
             }
         }
     }
@@ -301,7 +347,6 @@ fn write_summary<'tcx>(
             }
         }
     }
-    other |= written.contains(universal_regions.fr_static);
 
     // Match these regions to the original arguments
     let mut written_params = DenseBitSet::new_empty(params.len());
@@ -433,20 +478,14 @@ fn outside_regions<'tcx>(
     body: &Body<'tcx>,
     regioncx: &RegionInferenceContext<'tcx>,
 ) -> DenseBitSet<RegionVid> {
-    let universal_regions = regioncx.universal_regions();
     let num_regions = regioncx.definitions.len();
     let mut flows_to: IndexVec<RegionVid, Vec<RegionVid>> =
         IndexVec::from_elem_n(Vec::new(), num_regions);
     for constraint in regioncx.outlives_constraints() {
         flows_to[constraint.sup].push(constraint.sub);
     }
-    let mut from_outside = DenseBitSet::new_empty(num_regions);
-    let mut stack: Vec<RegionVid> = body
-        .args_iter()
-        .flat_map(|arg| regions_in(tcx, universal_regions, body.local_decls[arg].ty))
-        .chain([universal_regions.fr_static])
-        .collect();
-    stack.retain(|&region| from_outside.insert(region));
+    let mut from_outside = source_regions(tcx, body, regioncx.universal_regions(), num_regions);
+    let mut stack: Vec<RegionVid> = from_outside.iter().collect();
     while let Some(region) = stack.pop() {
         for &next in &flows_to[region] {
             if from_outside.insert(next) {
@@ -455,6 +494,226 @@ fn outside_regions<'tcx>(
         }
     }
     from_outside
+}
+
+/// The lifetimes of memory not borrowed in this body: the arguments' and `'static`
+fn source_regions<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    universal_regions: &UniversalRegions<'tcx>,
+    num_regions: usize,
+) -> DenseBitSet<RegionVid> {
+    let mut sources = DenseBitSet::new_empty(num_regions);
+    for arg in body.args_iter() {
+        for region in regions_in(tcx, universal_regions, body.local_decls[arg].ty) {
+            sources.insert(region);
+        }
+    }
+    sources.insert(universal_regions.fr_static);
+    sources
+}
+
+/// Whether a reference from `sources` can flow into `region`, the lifetime of a reference to a
+/// type with the lifetimes `inner`.
+fn flows_in(
+    flows_from: &IndexVec<RegionVid, Vec<RegionVid>>,
+    sources: &DenseBitSet<RegionVid>,
+    region: RegionVid,
+    inner: &[RegionVid],
+) -> bool {
+    // TODO: This misses a reference from outside whose type also holds its own lifetime, like
+    // `&'static mut Foo<'static>`. For `&'r T` to be well-formed, every lifetime in `T` must
+    // outlive `'r`, so a loan of a local whose type holds a `'static` has `'static` flowing
+    // into `'r`. Such a path says where the memory behind `T`'s own references came from, and
+    // that memory is its own `Used`. So the search skips `inner` and every lifetime that flows
+    // into them.
+    let mut behind = DenseBitSet::new_empty(flows_from.len());
+    let mut stack: Vec<RegionVid> = inner.iter().copied().filter(|&r| behind.insert(r)).collect();
+    while let Some(next) = stack.pop() {
+        for &source in &flows_from[next] {
+            if behind.insert(source) {
+                stack.push(source);
+            }
+        }
+    }
+
+    let mut seen = DenseBitSet::new_empty(flows_from.len());
+    seen.insert(region);
+    let mut stack = vec![region];
+    while let Some(next) = stack.pop() {
+        if sources.contains(next) {
+            return true;
+        }
+        for &source in &flows_from[next] {
+            if !behind.contains(source) && seen.insert(source) {
+                stack.push(source);
+            }
+        }
+    }
+    false
+}
+
+/// Finds the lifetimes in a type and the kind of memory behind each
+struct RegionUses<'a, 'tcx> {
+    tcx: TyCtxt<'tcx>,
+    typing_env: ty::TypingEnv<'tcx>,
+    universal_regions: &'a UniversalRegions<'tcx>,
+    /// The typeck root of the body
+    root: LocalDefId,
+    /// Types already walked, and whether they were behind a shared reference
+    seen: FxHashSet<(Ty<'tcx>, bool)>,
+    found: Vec<Used>,
+}
+
+impl<'a, 'tcx> RegionUses<'a, 'tcx> {
+    fn new(
+        tcx: TyCtxt<'tcx>,
+        body: &Body<'tcx>,
+        universal_regions: &'a UniversalRegions<'tcx>,
+    ) -> Self {
+        let typing_env = body.typing_env(tcx);
+        let root = tcx.typeck_root_def_id_local(body.source.def_id().expect_local());
+        RegionUses {
+            tcx,
+            typing_env,
+            universal_regions,
+            root,
+            seen: FxHashSet::default(),
+            found: Vec::new(),
+        }
+    }
+
+    /// Records each lifetime in `ty` with what kind of memory it holds:
+    ///
+    /// | Lifetime origin                          | Kind      |
+    /// |------------------------------------------|-----------|
+    /// | `&'r mut T`, not behind a shared ref     | Exclusive |
+    /// | `&'r T`, `T: Freeze`                     | ReadOnly  |
+    /// | `&'r T`, `T: !Freeze`; any `Context`     | Kernel    |
+    /// | `PhantomData`, a fn item, or not named   | Token     |
+    /// |   by the value a closure or future holds |           |
+    /// | raw pointers, `dyn`, params, the rest    | Unknown   |
+    ///
+    /// `Freeze` is shallow, so the walk goes into the type behind every reference.
+    fn walk(&mut self, ty: Ty<'tcx>, behind_shared: bool) {
+        if !ty.has_free_regions() || !self.seen.insert((ty, behind_shared)) {
+            return;
+        }
+        match *ty.kind() {
+            ty::Ref(region, inner, mutability) => {
+                self.reference(region, inner, mutability, behind_shared);
+                // A `&mut` behind a shared reference can't be written through
+                self.walk(inner, behind_shared || !mutability.is_mut());
+            }
+
+            // PhantomData is considered "Token"
+            ty::Adt(adt, _) if adt.is_phantom_data() => self.all(ty, OutsideKind::Token),
+            // strangelove Context is considered Kernel data
+            ty::Adt(adt, _) if self.tcx.is_lang_item(adt.did(), LangItem::Context) => {
+                self.all(ty, OutsideKind::Kernel)
+            }
+            // Other abstract data types
+            ty::Adt(adt, args) => {
+                // A `Cell` can hand out what it holds through a shared reference
+                let behind_shared = behind_shared && !adt.is_unsafe_cell();
+                for field in adt.all_fields() {
+                    self.walk(field.ty(self.tcx, args).skip_norm_wip(), behind_shared);
+                }
+            }
+            ty::Tuple(tys) => {
+                for ty in tys {
+                    self.walk(ty, behind_shared);
+                }
+            }
+            ty::Array(inner, _) | ty::Slice(inner) | ty::Pat(inner, _) => {
+                self.walk(inner, behind_shared)
+            }
+
+            // Values that hold another type. We need to label each lifetime of the outer type as
+            // `Token`.
+            ty::Closure(_, args) => {
+                self.holds(ty, args.as_closure().tupled_upvars_ty(), behind_shared)
+            }
+            ty::CoroutineClosure(_, args) => {
+                self.holds(ty, args.as_coroutine_closure().tupled_upvars_ty(), behind_shared)
+            }
+            ty::Coroutine(_, args) => {
+                self.holds(ty, args.as_coroutine().tupled_upvars_ty(), behind_shared)
+            }
+
+            // A future returned from an outside fn call.
+            ty::Alias(_, ty::AliasTy { kind: ty::Opaque { def_id }, args, .. })
+                if let hir::OpaqueTyOrigin::FnReturn { parent, .. }
+                | hir::OpaqueTyOrigin::AsyncFn { parent, .. } =
+                    self.tcx.opaque_ty_origin(def_id)
+                    && parent.as_local().is_none_or(|parent| {
+                        self.tcx.typeck_root_def_id_local(parent) != self.root
+                    }) =>
+            {
+                // Its fn's borrowck can shorten a lifetime to another, so `&'s Sender<'m>` can
+                // become `&'s Sender<'s>`
+                let hidden =
+                    self.tcx.type_of_opaque(def_id).instantiate(self.tcx, args).skip_norm_wip();
+                self.holds(ty, hidden, behind_shared);
+            }
+
+            // Types with a fixed kind
+            ty::FnDef(..) => self.all(ty, OutsideKind::Token),
+            _ => self.all(ty, OutsideKind::Unknown),
+        }
+    }
+
+    /// `ty`, whose value is a `held`. The lifetimes of `ty` that `held` doesn't name point to
+    /// nothing.
+    fn holds(&mut self, ty: Ty<'tcx>, held: Ty<'tcx>, behind_shared: bool) {
+        self.walk(held, behind_shared);
+        let named = regions_in(self.tcx, self.universal_regions, held);
+        for region in regions_in(self.tcx, self.universal_regions, ty) {
+            if !named.contains(&region) {
+                self.push(region, OutsideKind::Token, Vec::new());
+            }
+        }
+    }
+
+    /// The reference `&'region inner`, `behind_shared` if it is behind a shared reference
+    fn reference(
+        &mut self,
+        region: ty::Region<'tcx>,
+        inner: Ty<'tcx>,
+        mutability: Mutability,
+        behind_shared: bool,
+    ) {
+        let kind = if let ty::Adt(adt, _) = *inner.kind()
+            && self.tcx.is_lang_item(adt.did(), LangItem::Context)
+        {
+            // The executor makes every `Context` a task sees, in its own memory
+            OutsideKind::Kernel
+        } else if mutability.is_mut() && !behind_shared {
+            OutsideKind::Exclusive
+        } else if inner.has_non_region_param() || inner.has_aliases() {
+            // Can be a `Cell` of task memory
+            OutsideKind::Unknown
+        } else if self.tcx.erase_and_anonymize_regions(inner).is_freeze(self.tcx, self.typing_env) {
+            OutsideKind::ReadOnly
+        } else {
+            OutsideKind::Kernel
+        };
+        if !region.is_bound() && !region.is_erased() {
+            let inner = regions_in(self.tcx, self.universal_regions, inner);
+            self.push(self.universal_regions.to_region_vid(region), kind, inner);
+        }
+    }
+
+    /// Every lifetime in `ty`, all with the same memory behind them
+    fn all(&mut self, ty: Ty<'tcx>, kind: OutsideKind) {
+        for region in regions_in(self.tcx, self.universal_regions, ty) {
+            self.push(region, kind, Vec::new());
+        }
+    }
+
+    fn push(&mut self, region: RegionVid, kind: OutsideKind, inner: Vec<RegionVid>) {
+        self.found.push(Used { region, kind, inner, reached: false });
+    }
 }
 
 /// The region variables in `ty`, converted as borrowck does for deferred liveness.

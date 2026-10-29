@@ -240,6 +240,30 @@ pub enum Depth {
     Deep,
 }
 
+/// The memory outside the body that a pointer can hold, from the least to the most that a
+/// checkpoint must do about it
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, TyEncodable, TyDecodable, StableHash)]
+pub enum OutsideKind {
+    /// The lifetime is only in `PhantomData`, as in a peripheral token, so it points to nothing
+    Token,
+    /// Shared memory without interior mutability, which nothing can write
+    ReadOnly,
+    /// Shared memory with interior mutability. Tasks can't name such statics, so it comes from
+    /// strangelove
+    Kernel,
+    /// Exclusive memory, which only the task can write
+    Exclusive,
+    /// Memory behind a raw pointer, `dyn`, or a type the analysis can't see into
+    Unknown,
+}
+
+impl OutsideKind {
+    /// Whether a checkpoint must copy memory of this kind
+    pub fn copied(self) -> bool {
+        self >= OutsideKind::Exclusive
+    }
+}
+
 /// A list of loans for each body and the liveness during each statement
 #[derive(Debug, StableHash)]
 pub struct BodyLoans<'tcx> {
@@ -256,8 +280,8 @@ pub struct BodyLoans<'tcx> {
 pub struct RadWriteSummary {
     /// The lifetimes of the argument types that the callee can write through.
     pub written: DenseBitSet<usize>,
-    /// Whether the callee can also write memory that none of its arguments lead to.
-    pub other: bool,
+    /// The memory that the callee can also write, that none of its arguments lead to.
+    pub other: Option<OutsideKind>,
 }
 
 /// Instructions that are writes through a pointer, calls, drops or suspensions
@@ -267,8 +291,8 @@ pub struct InstructionLoans {
     pub live: DenseBitSet<LoanId>,
     /// Set of eligible loans that are still alive at the instruction
     pub reachable: Option<DenseBitSet<LoanId>>,
-    /// Whether those pointers can also hold memory not borrowed in this body
-    pub outside: bool,
+    /// The memory not borrowed in this body that those pointers can also hold
+    pub outside: Option<OutsideKind>,
     /// Whether the instruction is a call that used the callee's [`RadWriteSummary`]
     pub summary: bool,
 }
