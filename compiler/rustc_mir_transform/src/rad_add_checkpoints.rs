@@ -31,15 +31,18 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
         let sites = suspend_sites(body);
 
         // Make sure that the sites match the actual number of checkpoints
-        assert_eq!(sites.len(), table.suspensions.len(), "suspensions don't match the plan");
+        assert_eq!(sites.len(), table.awaits.len(), "suspensions don't match the plan");
 
         let checkpoint = tcx.get_diagnostic_item(sym::checkpoint).unwrap();
 
-        for (index, (site, objects)) in sites.into_iter().zip(&table.suspensions).enumerate() {
+        for (index, (site, checkpoints)) in sites.into_iter().zip(&table.awaits).enumerate() {
             assert_eq!(site.state.as_usize(), CoroutineArgs::RESERVED_VARIANTS + index);
 
-            let result = emit_checkpoint(tcx, body, site, checkpoint, objects);
-            
+            let result = emit_checkpoint(tcx, body, site, "checkpoint", checkpoint, &checkpoints.before)
+                .and_then(|_| {
+                    emit_checkpoint(tcx, body, site, "await effects", checkpoint, &checkpoints.effects)
+                });
+                
             if let Err(err_msg) = result {
                 Logger::error(&format!("state {} skipped: {}", site.state.as_usize(), err_msg));
                 break;
@@ -50,10 +53,12 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
     }
 }
 
+/// Inserts the `which` checkpoint of the `.await` at `site`, copying `objects`
 fn emit_checkpoint<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &mut Body<'tcx>,
     site: SuspendSite,
+    which: &str,
     checkpoint: DefId,
     objects: &[(CheckpointObject, Depth)],
 ) -> Result<(), String> {
@@ -66,7 +71,7 @@ fn emit_checkpoint<'tcx>(
     let n = regions.len() as u64;
     let total_bytes: u64 = regions.iter().map(|r| r.size).sum();
 
-    Logger::info(&format!("state {} ({:?}): {n} regions, {total_bytes} bytes", site.state.as_usize(), site.block));
+    Logger::info(&format!("state {} ({:?}) {which}: {n} regions, {total_bytes} bytes", site.state.as_usize(), site.block));
 
     let mut stmts: Vec<Statement<'tcx>> = Vec::new();
     let mut assign = |place: Place<'tcx>, rvalue: Rvalue<'tcx>| {
