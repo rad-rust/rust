@@ -5,6 +5,7 @@ use rustc_middle::mir::{
 use rustc_middle::ty::{self, Ty, TyCtxt, TypingEnv};
 use rustc_middle::ty::consts::ConstExt;
 use super::suspend_site::SuspendSite;
+use super::logger::Logger;
 
 pub(crate) struct Region<'tcx> {
     pub place: Place<'tcx>,
@@ -57,12 +58,12 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
             return Err("StateTransform left no coroutine layout".into());
         };
 
-        self.collect_regions(layout, this, &upvar_tys)?;
+        self.collect_regions(layout, this, &upvar_tys);
 
         Ok(self.regions)
     }
 
-    fn collect_regions(&mut self, layout: &CoroutineLayout<'tcx>, this: Place<'tcx>, upvar_tys: &[Ty<'tcx>]) -> Result<(), String> {
+    fn collect_regions(&mut self, layout: &CoroutineLayout<'tcx>, this: Place<'tcx>, upvar_tys: &[Ty<'tcx>]) {
         let objects = self.objects;
 
         for &(object, object_depth) in objects {
@@ -74,7 +75,7 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
                 CheckpointObject::Saved(field, slot) => {
                     let ty = layout.field_tys[slot].ty;
                     self.head_ty = Some(ty);
-
+                    
                     let place = this.project_deeper(
                         &[PlaceElem::Downcast(None, self.site.state), PlaceElem::Field(field, ty)],
                         self.tcx,
@@ -98,8 +99,6 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
                 CheckpointObject::Outside => {},
             }
         }
-
-        Ok(())
     }
 
     fn regions(&mut self, place: Place<'tcx>, ty: Ty<'tcx>, deep: bool, depth: u8) {
@@ -214,8 +213,10 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
 
     fn warn(&self, ty: Ty<'tcx>, message: &str) {
         match self.head_ty {
-            Some(head) if self.norm(head) != ty => eprintln!("  WARNING: '{ty}' within '{head}' {message}"),
-            _ => eprintln!("  WARNING: '{ty}' {message}"),
+            Some(head) if self.norm(head) != ty => {
+                Logger::warn(&format!("'{ty}' within '{head}' {message}"))
+            }
+            _ => Logger::warn(&format!("'{ty}' {message}")),
         }
     }
 

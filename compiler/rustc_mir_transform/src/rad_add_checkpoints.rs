@@ -7,13 +7,13 @@ use rustc_index::IndexVec;
 use rustc_middle::mir::interpret::Scalar;
 use rustc_middle::mir::*;
 use rustc_middle::ty::adjustment::PointerCoercion;
-use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{CoroutineArgs, CoroutineArgsExt, Ty, TyCtxt};
-use rustc_span::{Spanned, sym};
+use rustc_span::{Span, Spanned, sym};
 use crate::PassPolicy;
 
 use super::rad_protected::regions::Env;
 use super::rad_protected::suspend_site::{SuspendSite, suspend_sites};
+use super::rad_protected::logger::Logger;
 
 pub(super) struct RadAddCheckpoints;
 
@@ -35,16 +35,18 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
 
         let checkpoint = tcx.get_diagnostic_item(sym::checkpoint).unwrap();
 
-        let path = with_no_trimmed_paths!(tcx.def_path_str(body.source.def_id()));
-        eprintln!("=== rad checkpoints: {path} ===");
-
         for (index, (site, objects)) in sites.into_iter().zip(&table.suspensions).enumerate() {
             assert_eq!(site.state.as_usize(), CoroutineArgs::RESERVED_VARIANTS + index);
 
-            emit_checkpoint(tcx, body, site, checkpoint, objects).unwrap_or_else(|err| {
-                eprintln!("    state {} skipped: {}", site.state.as_usize(), err)
-            });
+            let result = emit_checkpoint(tcx, body, site, checkpoint, objects);
+            
+            if let Err(err_msg) = result {
+                Logger::error(&format!("state {} skipped: {}", site.state.as_usize(), err_msg));
+                break;
+            };
         }
+
+        Logger::report(tcx);
     }
 }
 
@@ -54,7 +56,7 @@ fn emit_checkpoint<'tcx>(
     site: SuspendSite,
     checkpoint: DefId,
     objects: &[(CheckpointObject, Depth)],
-) -> Result<(), String>{
+) -> Result<(), String> {
     let span = body.span;
     let source_info = SourceInfo::outermost(span);
 
@@ -63,7 +65,8 @@ fn emit_checkpoint<'tcx>(
    
     let n = regions.len() as u64;
     let total_bytes: u64 = regions.iter().map(|r| r.size).sum();
-    eprintln!("  state {} ({:?}): {n} regions, {total_bytes} bytes", site.state.as_usize(), site.block);
+
+    Logger::info(&format!("state {} ({:?}): {n} regions, {total_bytes} bytes", site.state.as_usize(), site.block));
 
     let mut stmts: Vec<Statement<'tcx>> = Vec::new();
     let mut assign = |place: Place<'tcx>, rvalue: Rvalue<'tcx>| {

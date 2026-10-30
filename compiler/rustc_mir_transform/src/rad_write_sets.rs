@@ -10,7 +10,6 @@ use rustc_middle::mir::{
     InstructionLoans, LoanId, Local, Location, Mutability, NonDivergingIntrinsic, Operand, Place,
     ProjectionElem, Rvalue, START_BLOCK, Statement, StatementKind, Terminator, TerminatorKind,
 };
-use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{CAPTURE_STRUCT_LOCAL, TyCtxt, TypeVisitableExt};
 use rustc_mir_dataflow::impls::always_storage_live_locals;
 use rustc_span::Spanned;
@@ -36,7 +35,7 @@ impl<'tcx> crate::MirPass<'tcx> for RadWriteSets {
         if let Some(coroutine) = body.coroutine.as_mut() {
             coroutine.rad_checkpoints = Some(plan.table());
         }
-        with_no_trimmed_paths!(print(tcx, body, &plan));
+        // with_no_trimmed_paths!(print(tcx, body, &plan));
     }
 }
 
@@ -637,6 +636,7 @@ fn on_cycle(body: &Body<'_>, block: BasicBlock) -> bool {
     false
 }
 
+#[allow(dead_code)]
 fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, plan: &CheckpointPlan<'tcx>) {
     eprintln!("=== rad write sets: {} ===", tcx.def_path_str(body.source.def_id()));
     let suspension = |bb| plan.suspensions.iter().position(|s| s.end == bb).unwrap();
