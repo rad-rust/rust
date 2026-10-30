@@ -202,7 +202,7 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
     }
 
     fn opaque_ptr(&mut self, place: Place<'tcx>, ty: Ty<'tcx>, size: u64) {
-        self.warn(ty, &format!("holds a pointer: {SKIP_CHECKPOINT_MSG}"));
+        self.error(ty, &format!("holds a pointer: {SKIP_CHECKPOINT_MSG}"));
         self.opaque(place, ty, size, false);
     }
 
@@ -212,11 +212,25 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
     }
 
     fn warn(&self, ty: Ty<'tcx>, message: &str) {
-        match self.head_ty {
+        self.report(ty, message, false);
+    }
+
+    fn error(&self, ty: Ty<'tcx>, message: &str) {
+        self.report(ty, message, true);
+    }
+
+    fn report(&self, ty: Ty<'tcx>, message: &str, error: bool) {
+        let message = match self.head_ty {
             Some(head) if self.norm(head) != ty => {
-                Logger::warn(&format!("'{ty}' within '{head}' {message}"))
-            }
-            _ => Logger::warn(&format!("'{ty}' {message}")),
+                format!("'{ty}' within '{head}' {message}")
+            },
+            _ => format!("'{ty}' {message}"),
+        };
+
+        if error {
+            Logger::error(&message);
+        } else {
+            Logger::warn(&message);
         }
     }
 
