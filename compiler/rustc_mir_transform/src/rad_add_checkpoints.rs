@@ -94,7 +94,8 @@ fn emit_checkpoint<'tcx>(
     for (i, region) in regions.iter().enumerate() {
         // _1 = &raw mut field; 
         let raw = new_local(body, Ty::new_ptr(tcx, region.ty, Mutability::Mut));
-        assign(raw.into(), Rvalue::RawPtr(RawPtrKind::Mut, region.place));
+        let place = deref_region(tcx, body, span, region.place, &mut assign);
+        assign(raw.into(), Rvalue::RawPtr(RawPtrKind::Mut, place));
         //  _2 = _1 as *mut u8;
         let ptr = new_local(body, u8_ptr);
         assign(ptr.into(), Rvalue::Cast(CastKind::PtrToPtr, Operand::Move(raw.into()), u8_ptr));
@@ -161,4 +162,29 @@ fn emit_checkpoint<'tcx>(
     });
 
     Ok(())
+}
+
+fn deref_region<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &mut Body<'tcx>,
+    span: Span,
+    mut place: Place<'tcx>,
+    assign: &mut impl FnMut(Place<'tcx>, Rvalue<'tcx>),
+) -> Place<'tcx> {
+    while let Some(i) = place.projection.iter().skip(1).position(|elem| matches!(elem, PlaceElem::Deref)) {
+        let i = i + 1;
+
+        let prefix = Place { local: place.local, projection: tcx.mk_place_elems(&place.projection[..i]) };
+        let ref_ty = prefix.ty(&body.local_decls, tcx).ty;
+
+        let tmp = body.local_decls.push(LocalDecl::new(ref_ty, span));
+        assign(
+            tmp.into(),
+            Rvalue::Use(Operand::Copy(prefix), WithRetag::No),
+        );
+
+        place = Place { local: tmp, projection: tcx.mk_place_elems(&place.projection[i..]) };
+    }
+
+    place
 }
