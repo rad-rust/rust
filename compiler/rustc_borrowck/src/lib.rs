@@ -433,7 +433,7 @@ fn borrowck_check_region_constraints<'diag, 'tcx>(
         polonius_output,
         opt_closure_req,
         nll_errors,
-        polonius_context,
+        mut polonius_context,
     } = nll::compute_regions(
         root_cx,
         &infcx,
@@ -464,7 +464,7 @@ fn borrowck_check_region_constraints<'diag, 'tcx>(
         body,
         &regioncx,
         &borrow_set,
-        polonius_context.as_ref(),
+        polonius_context.as_mut(),
     ) {
         root_cx.record_loans(def, loans);
     }

@@ -11,7 +11,7 @@ use rustc_macros::{StableHash, TyDecodable, TyEncodable, TypeFoldable, TypeVisit
 use rustc_span::def_id::{DefId, LocalDefId};
 use rustc_span::{Span, Symbol};
 
-use super::{ConstValue, Mutability, Place, SourceInfo, StatementId};
+use super::{ConstValue, Local, Mutability, Place, SourceInfo, StatementId};
 use crate::ty::{self, CoroutineArgsExt, Ty};
 
 rustc_index::newtype_index! {
@@ -295,4 +295,15 @@ pub struct InstructionLoans {
     pub outside: Option<OutsideKind>,
     /// Whether the instruction is a call that used the callee's [`RadWriteSummary`]
     pub summary: bool,
+    /// The places in the future that can hold the copied outside memory, or `None` if a place
+    /// outside the future can also hold it
+    pub holders: Option<OutsideHolders>,
+}
+
+/// The places in the future whose types can hold a reference to some outside memory, kept here
+/// since lifetimes are erased by the time `RadWriteSets` runs.
+#[derive(Debug, Default, StableHash)]
+pub struct OutsideHolders {
+    pub locals: Vec<Local>,
+    pub upvars: Vec<FieldIdx>,
 }

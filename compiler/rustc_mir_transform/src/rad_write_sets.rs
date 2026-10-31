@@ -370,7 +370,8 @@ impl<'tcx> Analysis<'_, 'tcx> {
                     .map(|statement_index| Location { block: bb, statement_index }),
             );
         }
-        let before = self.write_set(&code, saved_at(body, &self.liveness, index));
+        let no_pending = DenseBitSet::new_empty(body.local_decls.len());
+        let before = self.write_set(&code, saved_at(body, &self.liveness, index), &no_pending);
 
         // `effects`: the loop without its `Yield`, and the code after it until the awaitee is dead
         let mut code = Vec::new();
@@ -395,7 +396,7 @@ impl<'tcx> Analysis<'_, 'tcx> {
                 saved.remove(local);
             }
         }
-        let effects = self.write_set(&code, saved);
+        let effects = self.write_set(&code, saved, &pending);
 
         AwaitPlan {
             suspend: awaited.suspend,
@@ -408,9 +409,14 @@ impl<'tcx> Analysis<'_, 'tcx> {
         }
     }
 
-    /// Finds what the checkpoint covering the instructions at `code` must copy, when `saved` are
-    /// the locals stored in the future where it is taken
-    fn write_set(&self, code: &[Location], saved: DenseBitSet<Local>) -> WriteSet<'tcx> {
+    /// Find what the checkpoint covering `code` must copy, given the locals `saved` in the future
+    /// there and the live ones still `pending`.
+    fn write_set(
+        &self,
+        code: &[Location],
+        saved: DenseBitSet<Local>,
+        pending: &DenseBitSet<Local>,
+    ) -> WriteSet<'tcx> {
         let body = self.body;
         // Find statements that modify objects
         let mut effects = Effects::default();
@@ -449,7 +455,7 @@ impl<'tcx> Analysis<'_, 'tcx> {
             }
             // Find where this Place actually aliases
             let reach = if writes_through_pointers(&effect) {
-                self.reach(location, &effect, &saved, &mut objects)
+                self.reach(location, &effect, &saved, pending, &mut objects)
             } else {
                 None
             };
@@ -479,6 +485,7 @@ impl<'tcx> Analysis<'_, 'tcx> {
         location: Location,
         effect: &Effect<'tcx>,
         saved: &DenseBitSet<Local>,
+        pending: &DenseBitSet<Local>,
         objects: &mut FxIndexMap<CheckpointObject, Depth>,
     ) -> Option<Reach<'tcx>> {
         let span = self.body.source_info(location).span;
@@ -513,12 +520,40 @@ impl<'tcx> Analysis<'_, 'tcx> {
         }
         // Pointer points to memory outside the future that the trusted base doesn't restore
         if targets.outside.is_some_and(OutsideKind::copied) {
-            match self.holders(location, effect, saved) {
-                Some(holders) => {
-                    for holder in holders {
-                        if let Some(object) = self.object(holder.into(), saved) {
-                            record(objects, object, Depth::Deep);
+            let held = match self.holders(location, effect, saved) {
+                Some(holders) => Some(
+                    holders
+                        .into_iter()
+                        .filter_map(|holder| self.object(holder.into(), saved))
+                        .collect(),
+                ),
+                // Find the places in the future that can hold the memory, from the lifetimes a
+                // reference to it can be copied into
+                None => instruction
+                    // Skip a `Box`'s memory, since it doesn't come through a lifetime
+                    .filter(|instruction| instruction.outside == targets.outside)
+                    .and_then(|instruction| instruction.holders.as_ref())
+                    .and_then(|holders| {
+                        let mut held = Vec::new();
+                        for &local in &holders.locals {
+                            // Give up on a local that isn't in the future yet, since the
+                            // checkpoint can't follow it
+                            if pending.contains(local) {
+                                return None;
+                            }
+                            if saved.contains(local) {
+                                held.push(self.object(local.into(), saved)?);
+                            }
                         }
+                        let upvars = holders.upvars.iter();
+                        held.extend(upvars.map(|&field| CheckpointObject::Upvar(Some(field))));
+                        Some(held)
+                    }),
+            };
+            match held {
+                Some(held) => {
+                    for object in held {
+                        record(objects, object, Depth::Deep);
                     }
                 }
                 None => record(objects, CheckpointObject::Outside, Depth::Shallow),
@@ -925,7 +960,7 @@ fn print_live_loans<'tcx>(
     saved: &DenseBitSet<Local>,
 ) {
     match reach.instruction {
-        Some(InstructionLoans { live, reachable: Some(reachable), outside, summary }) => {
+        Some(InstructionLoans { live, reachable: Some(reachable), outside, summary, holders }) => {
             let reachable: Vec<String> = reachable
                 .iter()
                 .filter_map(|loan| {
@@ -933,14 +968,25 @@ fn print_live_loans<'tcx>(
                     Some(format!("{loan:?} &{}{place:?}", mutability.prefix_str()))
                 })
                 .collect();
-            let outside = outside
+            let outside_text = outside
                 .map_or_else(String::new, |kind| format!(" + outside ({})", outside_label(kind)));
             let summary = if *summary { ", callee summary" } else { "" };
             eprintln!(
-                "                 reaches: {{{}}}{outside} (of {} live{summary})",
+                "                 reaches: {{{}}}{outside_text} (of {} live{summary})",
                 reachable.join(", "),
                 live.count()
             );
+            if outside.is_some_and(OutsideKind::copied) {
+                let holders = holders.as_ref().map_or_else(
+                    || "untracked".to_string(),
+                    |holders| {
+                        let locals = holders.locals.iter().map(|local| format!("{local:?}"));
+                        let upvars = holders.upvars.iter().map(|field| format!("upvar {field:?}"));
+                        format!("{{{}}}", locals.chain(upvars).collect::<Vec<_>>().join(", "))
+                    },
+                );
+                eprintln!("                 outside held by: {holders}");
+            }
         }
         _ => eprintln!("                 reaches: no borrowck result"),
     }
