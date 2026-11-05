@@ -46,12 +46,12 @@ pub fn checkpoint() -> impl Future<Output = ()> {
 
 #[stable(feature = "rad_protected", since = "1.95.0")]
 struct Yield {
-    ready: bool
+    ready: u32
 }
 
 impl Yield {
     fn new() -> Self {
-        Self { ready: false }
+        Self { ready: 25 }
     }
 }
 
@@ -59,10 +59,10 @@ impl Future for Yield {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-        if self.ready {
+        if self.ready == 0 {
             return Poll::Ready(());
         }
-        self.ready = true;
+        self.ready -= 1;
         cx.waker().wake_by_ref();
         Poll::Pending
     }

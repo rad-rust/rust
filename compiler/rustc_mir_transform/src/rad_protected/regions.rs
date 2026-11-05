@@ -1,6 +1,6 @@
 use rustc_abi::FieldIdx;
 use rustc_middle::mir::{
-    Body, CheckpointObject, CoroutineLayout, Depth, Place, PlaceElem, StatementKind,
+    Body, CheckpointObject, CoroutineLayout, Depth, Place, PlaceElem, StatementKind, BasicBlock,
 };
 use rustc_middle::ty::{self, Ty, TyCtxt, TypingEnv};
 use rustc_middle::ty::consts::ConstExt;
@@ -36,17 +36,19 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
 
         Self { tcx, body, site, objects, typing_env, head_ty: None, regions: vec![] }
     }
-
-    pub(crate) fn get_regions(mut self) -> Result<Vec<Region<'tcx>>, String> {
-        let body = self.body;
-
+    
+    pub(crate) fn coroutine_place(body: &Body<'tcx>, block: BasicBlock) -> Result<Place<'tcx>, String> {
         let Some(StatementKind::SetDiscriminant { place: this, .. }) =
-            body[self.site.block].statements.last().map(|statement| &statement.kind)
+            body[block].statements.last().map(|statement| &statement.kind)
         else {
             return Err("suspend block doesn't end with SetDiscriminant".into());
         };
+        
+        Ok(**this)
+    }
 
-        let this: Place<'tcx> = **this;
+    pub(crate) fn get_regions(mut self, this: Place<'tcx>) -> Result<Vec<Region<'tcx>>, String> {
+        let body = self.body;
 
         let ty::Coroutine(_, args) = *this.ty(&body.local_decls, self.tcx).ty.kind() else {
             return Err("the state is not written through a coroutine".into());

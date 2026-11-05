@@ -9,6 +9,7 @@ use rustc_middle::mir::{
     AwaitCheckpoints, BasicBlock, Body, BodyLoans, CheckpointObject, CheckpointTable, Depth,
     InstructionLoans, LoanId, Local, Location, Mutability, NonDivergingIntrinsic, Operand, Place,
     ProjectionElem, Rvalue, START_BLOCK, Statement, StatementKind, Terminator, TerminatorKind,
+    StatementId,
 };
 use rustc_middle::ty::{CAPTURE_STRUCT_LOCAL, TyCtxt, TypeVisitableExt};
 use rustc_mir_dataflow::impls::{
@@ -36,8 +37,9 @@ impl<'tcx> crate::MirPass<'tcx> for RadWriteSets {
         }
         let Some(plan) = analyze(tcx, body) else { return };
         // Keep what to copy at each `.await` for the pass inserting the checkpoints
+        let table = plan.table(body).unwrap();
         if let Some(coroutine) = body.coroutine.as_mut() {
-            coroutine.rad_checkpoints = Some(plan.table());
+            coroutine.rad_checkpoints = Some(table);
         }
         // with_no_trimmed_paths!(print(tcx, body, &plan));
     }
@@ -203,6 +205,8 @@ struct AwaitPlan<'tcx> {
     ends: Vec<Location>,
     /// Locals live where `effects` is taken that no `Yield` stores in the future yet
     pending: DenseBitSet<Local>,
+    /// The statement Id of the terminator of the basic block the leads into the polling loop
+    loop_head: BasicBlock,
 }
 
 /// The write set of one checkpoint: the writes in the code it covers and what it must copy
@@ -219,19 +223,28 @@ struct WriteSet<'tcx> {
 
 impl CheckpointPlan<'_> {
     /// What to copy at each `.await`, without the details of how it was found
-    fn table(&self) -> CheckpointTable {
+    fn table(&self, body: &Body<'_>) -> Option<CheckpointTable> {
         let list = |write_set: &WriteSet<'_>| -> Vec<_> {
             write_set.objects.iter().map(|(&object, &depth)| (object, depth)).collect()
         };
+        let locs_to_ids = |locs: &Vec<Location>| -> Option<Vec<StatementId>> {
+            locs.iter().map(|&location| id_at(body, location)).collect()
+        };
+        let loop_head_id = |loop_head: BasicBlock| -> Option<StatementId> {
+            id_at(body, Location { block: loop_head, statement_index: body[loop_head].statements.len() })
+        };
+
         let awaits = self
             .awaits
             .iter()
-            .map(|plan| AwaitCheckpoints {
-                before: list(&plan.before),
-                effects: list(&plan.effects),
-            })
-            .collect();
-        CheckpointTable { awaits }
+            .map(|plan| Some(AwaitCheckpoints {
+                    before: list(&plan.before),
+                    effects: list(&plan.effects),
+                    loop_head: loop_head_id(plan.loop_head)?,
+                    ends: locs_to_ids(&plan.ends)?,
+                }))
+                .collect::<Option<_>>()?;
+        Some(CheckpointTable { awaits })
     }
 }
 
@@ -388,6 +401,22 @@ impl<'tcx> Analysis<'_, 'tcx> {
         }
         let effects = self.write_set(&code, saved);
 
+        let predecessors = body.basic_blocks.predecessors();
+
+        let mut loop_heads: Vec<_> = predecessors[awaited.head]
+            .iter()
+            .copied()
+            .filter(|&bb_idx| {
+                !awaited.blocks.contains(bb_idx) &&
+                    !body.basic_blocks[bb_idx].is_cleanup
+            })
+            .collect();
+
+        // TODO: We currently only handle cases with a single loop head
+        assert_eq!(loop_heads.len(), 1);
+        let loop_head = loop_heads.pop().unwrap();
+
+
         AwaitPlan {
             suspend: awaited.suspend,
             before,
@@ -396,6 +425,7 @@ impl<'tcx> Analysis<'_, 'tcx> {
             effects,
             ends: awaited.ends.clone(),
             pending,
+            loop_head,
         }
     }
 

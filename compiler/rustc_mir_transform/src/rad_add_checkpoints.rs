@@ -14,6 +14,7 @@ use crate::PassPolicy;
 use super::rad_protected::regions::Env;
 use super::rad_protected::suspend_site::{SuspendSite, suspend_sites};
 use super::rad_protected::logger::Logger;
+use super::rad_protected::locate_stmts::Locations;
 
 pub(super) struct RadAddCheckpoints;
 
@@ -28,6 +29,8 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
         else {
             return;
         };
+
+        let locations = Locations::resolve(&table, body);
         let sites = suspend_sites(body);
 
         // Make sure that the sites match the actual number of checkpoints
@@ -38,11 +41,8 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
         for (index, (site, checkpoints)) in sites.into_iter().zip(&table.awaits).enumerate() {
             assert_eq!(site.state.as_usize(), CoroutineArgs::RESERVED_VARIANTS + index);
 
-            let result = emit_checkpoint(tcx, body, site, "checkpoint", checkpoint, &checkpoints.before)
-                .and_then(|_| {
-                    emit_checkpoint(tcx, body, site, "await effects", checkpoint, &checkpoints.effects)
-                });
-                
+            let result = emit_await(tcx, body, site, checkpoint, checkpoints, &locations);
+
             if let Err(err_msg) = result {
                 Logger::error(&format!("state {} skipped: {}", site.state.as_usize(), err_msg));
                 break;
@@ -53,11 +53,56 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
     }
 }
 
-/// Inserts the `which` checkpoint of the `.await` at `site`, copying `objects`
+fn emit_await<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &mut Body<'tcx>,
+    site: SuspendSite,
+    checkpoint: DefId,
+    checkpoints: &AwaitCheckpoints,
+    locations: &Locations,
+) -> Result<(), String> {
+    let this = Env::coroutine_place(body, site.block)?;
+
+    let start_site = site.new_block(locations.get(checkpoints.loop_head)?.block);
+    emit_checkpoint(tcx, body, start_site, this, "checkpoint", checkpoint, &checkpoints.before)?;
+
+    for end in &checkpoints.ends {
+        let location = locations.get(*end)?;
+
+        split_at(tcx, body, location);
+
+        let end_site = site.new_block(location.block);
+        emit_checkpoint(tcx, body, end_site, this, "await effects", checkpoint, &checkpoints.effects)?;
+    }
+    Ok(())
+}
+
+fn split_at<'tcx>(_tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, location: Location) {
+    let fallback = SourceInfo::outermost(body.span);
+    let blocks = body.basic_blocks_mut();
+    let head = &mut blocks[location.block];
+    let tail_statements = head.statements.split_off(location.statement_index);
+    let old_terminator = head.terminator.take();
+    let is_cleanup = head.is_cleanup;
+    let source_info = old_terminator.as_ref().map_or(fallback, |t| t.source_info);
+
+    let mut tail = BasicBlockData::new(old_terminator, is_cleanup);
+    tail.statements = tail_statements;
+    let tail = blocks.push(tail);
+
+    blocks[location.block].terminator = Some(Terminator {
+        source_info,
+        kind: TerminatorKind::Goto { target: tail },
+        loop_hint_attrs: ThinVec::new(),
+        id: None,
+    });
+}
+
 fn emit_checkpoint<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &mut Body<'tcx>,
     site: SuspendSite,
+    this: Place<'tcx>,
     which: &str,
     checkpoint: DefId,
     objects: &[(CheckpointObject, Depth)],
@@ -66,8 +111,8 @@ fn emit_checkpoint<'tcx>(
     let source_info = SourceInfo::outermost(span);
 
     let env = Env::new(tcx, body, site, objects);
-    let regions = env.get_regions()?;
-   
+    let regions = env.get_regions(this)?;
+
     let n = regions.len() as u64;
     let total_bytes: u64 = regions.iter().map(|r| r.size).sum();
 
@@ -97,7 +142,7 @@ fn emit_checkpoint<'tcx>(
     let array = new_local(body, array_ty);
 
     for (i, region) in regions.iter().enumerate() {
-        // _1 = &raw mut field; 
+        // _1 = &raw mut field;
         let raw = new_local(body, Ty::new_ptr(tcx, region.ty, Mutability::Mut));
         let place = deref_region(tcx, body, span, region.place, &mut assign);
         assign(raw.into(), Rvalue::RawPtr(RawPtrKind::Mut, place));
@@ -108,7 +153,7 @@ fn emit_checkpoint<'tcx>(
         // regions[i] = (_2, size, compare);
         let pair = new_local(body, pair_ty);
         let fields: IndexVec<_, _> = IndexVec::from_raw(vec![
-            Operand::Move(ptr.into()), 
+            Operand::Move(ptr.into()),
             usize_const(region.size),
             bool_const(region.compare),
         ]);

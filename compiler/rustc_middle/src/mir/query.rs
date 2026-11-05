@@ -214,6 +214,10 @@ pub struct AwaitCheckpoints {
     pub before: Vec<(CheckpointObject, Depth)>,
     /// The side effects of the `.await` call
     pub effects: Vec<(CheckpointObject, Depth)>,
+    /// The statement Id of the terminator of the basic block the leads into the polling loop
+    pub loop_head: StatementId,
+    /// Ids of the statements before which `effects` is taken (the awaitee's `StorageDead`s)
+    pub ends: Vec<StatementId>,
 }
 
 TrivialTypeTraversalImpls! { CheckpointTable }

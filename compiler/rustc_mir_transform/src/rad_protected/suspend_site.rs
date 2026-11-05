@@ -12,6 +12,12 @@ pub(crate) struct SuspendSite {
     pub state: VariantIdx,
 }
 
+impl SuspendSite {
+    pub(crate) fn new_block(&self, block: BasicBlock) -> Self {
+        Self { block, state: self.state }
+    }
+}
+
 /// Enumerate the suspend sites by .await()s being called
 pub(crate) fn suspend_sites(body: &Body<'_>) -> Vec<SuspendSite> {
     let mut sites: Vec<SuspendSite> = body
