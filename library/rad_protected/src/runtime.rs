@@ -1,6 +1,7 @@
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
+use core::ffi::CStr;
 use libc;
 
 #[stable(feature = "rad_protected", since = "1.95.0")]
@@ -10,11 +11,22 @@ impl Runtime {
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "checkpoint"]
     pub fn checkpoint(site: u32, regions: &[(*mut u8, usize, bool)]) {
+        Self::print_checkpoint(site, regions, c"checkpoint");
+    }
+
+    #[stable(feature = "rad_protected", since = "1.95.0")]
+    #[rustc_diagnostic_item = "await_effects"]
+    pub fn await_effects(site: u32, regions: &[(*mut u8, usize, bool)]) {
+        Self::print_checkpoint(site, regions, c"await effects");
+    }
+
+    fn print_checkpoint(site: u32, regions: &[(*mut u8, usize, bool)], kind: &CStr) {
         unsafe {
             libc::printf(
-                c"checkpoint: state %u, %zu regions\n".as_ptr(),
+                c"%s: state %u, %zu regions\n".as_ptr(),
+                kind.as_ptr(),
                 site as libc::c_uint,
-                regions.len() as libc::size_t,
+                regions.len() as libc::size_t
             );
 
             for (i, &(ptr, len, compare)) in regions.iter().enumerate() {

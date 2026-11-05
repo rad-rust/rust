@@ -36,12 +36,10 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
         // Make sure that the sites match the actual number of checkpoints
         assert_eq!(sites.len(), table.awaits.len(), "suspensions don't match the plan");
 
-        let checkpoint = tcx.get_diagnostic_item(sym::checkpoint).unwrap();
-
         for (index, (site, checkpoints)) in sites.into_iter().zip(&table.awaits).enumerate() {
             assert_eq!(site.state.as_usize(), CoroutineArgs::RESERVED_VARIANTS + index);
 
-            let result = emit_await(tcx, body, site, checkpoint, checkpoints, &locations);
+            let result = emit_await(tcx, body, site, checkpoints, &locations);
 
             if let Err(err_msg) = result {
                 Logger::error(&format!("state {} skipped: {}", site.state.as_usize(), err_msg));
@@ -57,20 +55,21 @@ fn emit_await<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &mut Body<'tcx>,
     site: SuspendSite,
-    checkpoint: DefId,
     checkpoints: &AwaitCheckpoints,
     locations: &Locations,
 ) -> Result<(), String> {
     let this = Env::coroutine_place(body, site.block)?;
 
+    let checkpoint = tcx.get_diagnostic_item(sym::checkpoint).unwrap();
     let start_site = site.new_block(locations.get(checkpoints.loop_head)?.block);
     emit_checkpoint(tcx, body, start_site, this, "checkpoint", checkpoint, &checkpoints.before)?;
-
+    
     for end in &checkpoints.ends {
         let location = locations.get(*end)?;
 
         split_at(tcx, body, location);
 
+        let checkpoint = tcx.get_diagnostic_item(sym::await_effects).unwrap();
         let end_site = site.new_block(location.block);
         emit_checkpoint(tcx, body, end_site, this, "await effects", checkpoint, &checkpoints.effects)?;
     }

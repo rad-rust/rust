@@ -541,6 +541,7 @@ symbols! {
         avx512_target_feature,
         avx512bw,
         avx512f,
+        await_effects,
         await_macro,
         backchain,
         backend_repr,
