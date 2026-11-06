@@ -238,6 +238,7 @@ impl CheckpointPlan<'_> {
             .map(|plan| AwaitCheckpoints {
                 before: list(&plan.before),
                 effects: list(&plan.effects),
+                ends: plan.ends.clone(),
             })
             .collect();
         CheckpointTable { awaits }

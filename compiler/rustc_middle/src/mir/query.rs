@@ -11,7 +11,7 @@ use rustc_macros::{StableHash, TyDecodable, TyEncodable, TypeFoldable, TypeVisit
 use rustc_span::def_id::{DefId, LocalDefId};
 use rustc_span::{Span, Symbol};
 
-use super::{ConstValue, Local, Mutability, Place, SourceInfo, StatementId};
+use super::{ConstValue, Local, Location, Mutability, Place, SourceInfo, StatementId};
 use crate::ty::{self, CoroutineArgsExt, Ty};
 
 rustc_index::newtype_index! {
@@ -214,6 +214,8 @@ pub struct AwaitCheckpoints {
     pub before: Vec<(CheckpointObject, Depth)>,
     /// The side effects of the `.await` call
     pub effects: Vec<(CheckpointObject, Depth)>,
+    /// The awaitee's `StorageDead`s
+    pub ends: Vec<Location>,
 }
 
 TrivialTypeTraversalImpls! { CheckpointTable }

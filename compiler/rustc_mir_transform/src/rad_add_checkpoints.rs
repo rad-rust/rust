@@ -33,6 +33,21 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
 
         for (index, (site, checkpoints)) in sites.iter().zip(&table.awaits).enumerate() {
             assert_eq!(site.state.as_usize(), CoroutineArgs::RESERVED_VARIANTS + index);
+
+            // Make sure that each `StorageDead` of the awaitee is still where the plan found it,
+            // since `StateTransform` leaves a `Nop` there and can renumber the blocks
+            for &end in &checkpoints.ends {
+                let kind = body
+                    .basic_blocks
+                    .get(end.block)
+                    .and_then(|data| data.statements.get(end.statement_index))
+                    .map(|statement| &statement.kind);
+                assert!(
+                    matches!(kind, Some(StatementKind::Nop)),
+                    "`.await` end moved from {end:?}"
+                );
+            }
+
             emit_checkpoint(tcx, body, site, "checkpoint", &checkpoints.before);
             emit_checkpoint(tcx, body, site, "await effects", &checkpoints.effects);
         }
