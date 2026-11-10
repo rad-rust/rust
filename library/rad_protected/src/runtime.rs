@@ -1,8 +1,33 @@
+use core::fmt::{self, Write};
 use core::future::Future;
 use core::pin::Pin;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::{Context, Poll};
-use core::ffi::CStr;
-use libc;
+
+static WRITER: AtomicUsize = AtomicUsize::new(0);
+
+#[stable(feature = "rad_protected", since = "1.95.0")]
+pub fn set_writer(f: fn(&[u8])) {
+    WRITER.store(f as usize, Ordering::Release);
+}
+
+#[stable(feature = "rad_protected", since = "1.95.0")]
+pub fn clear_writer() {
+    WRITER.store(0, Ordering::Release);
+}
+
+struct DeviceWriter;
+
+impl Write for DeviceWriter {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let writer = WRITER.load(Ordering::Acquire);
+        if writer != 0 {
+            let f: fn(&[u8]) = unsafe { core::mem::transmute::<usize, fn(&[u8])>(writer) };
+            f(s.as_bytes());
+        }
+        Ok(())
+    }
+}
 
 #[stable(feature = "rad_protected", since = "1.95.0")]
 pub struct Runtime;
@@ -11,42 +36,34 @@ impl Runtime {
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "checkpoint"]
     pub fn checkpoint(site: u32, regions: &[(*mut u8, usize, bool)]) {
-        Self::print_checkpoint(site, regions, c"checkpoint");
+        Self::print_checkpoint(site, regions, "checkpoint");
     }
 
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "await_effects"]
     pub fn await_effects(site: u32, regions: &[(*mut u8, usize, bool)]) {
-        Self::print_checkpoint(site, regions, c"await effects");
+        Self::print_checkpoint(site, regions, "await effects");
     }
 
-    fn print_checkpoint(site: u32, regions: &[(*mut u8, usize, bool)], kind: &CStr) {
-        unsafe {
-            libc::printf(
-                c"%s: state %u, %zu regions\n".as_ptr(),
-                kind.as_ptr(),
-                site as libc::c_uint,
-                regions.len() as libc::size_t
+    fn print_checkpoint(site: u32, regions: &[(*mut u8, usize, bool)], kind: &str) {
+        let mut w = DeviceWriter;
+        let _ = writeln!(w, "{kind}: state {site}, {} regions", regions.len());
+
+        for (i, &(ptr, len, compare)) in regions.iter().enumerate() {
+            let _ = writeln!(
+                w,
+                "  region {i}: {len} bytes at {ptr:p} {}",
+                if compare { "comparing" } else { "non-comparing" }
             );
 
-            for (i, &(ptr, len, compare)) in regions.iter().enumerate() {
-                libc::printf(
-                    c"  region %zu: %zu bytes at %p %s\n".as_ptr(),
-                    i as libc::size_t,
-                    len as libc::size_t,
-                    ptr,
-                    if compare { c"comparing".as_ptr() } else { c"non-comparing".as_ptr() }
-                );
-
-                let bytes = core::slice::from_raw_parts(ptr, len);
-                libc::printf(c"    bytes: ".as_ptr());
-
-                for &byte in bytes {
-                    libc::printf(c"%02x ".as_ptr(), byte as libc::c_uint);
+            let _ = write!(w, "    bytes: ");
+            if !ptr.is_null() && len != 0 {
+                let bytes = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
+                for &b in bytes {
+                    let _ = write!(w, "{b:02x} ");
                 }
-
-                libc::printf(c"\n".as_ptr());
             }
+            let _ = writeln!(w);
         }
     }
 }

@@ -262,7 +262,6 @@ dependencies = [
  "alloc",
  "compiler_builtins",
  "core",
- "libc",
 ]
 
 [[package]]

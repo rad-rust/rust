@@ -8,13 +8,14 @@ use rustc_middle::mir::interpret::Scalar;
 use rustc_middle::mir::*;
 use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::{CoroutineArgs, CoroutineArgsExt, Ty, TyCtxt};
-use rustc_span::{Span, Spanned, sym};
+use rustc_span::{Span, Spanned};
 use crate::PassPolicy;
 
 use super::rad_protected::regions::Env;
 use super::rad_protected::suspend_site::{SuspendSite, suspend_sites};
 use super::rad_protected::logger::Logger;
 use super::rad_protected::locate_stmts::Locations;
+use super::rad_protected::runtime_items::RuntimeItems;
 
 pub(super) struct RadAddCheckpoints;
 
@@ -24,6 +25,10 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
     }
 
     fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+        let Some(runtime) = RuntimeItems::new(tcx) else {
+            return;
+        };
+
         // Taking the table keeps it out of optimized MIR and crate metadata.
         let Some(table) = body.coroutine.as_mut().and_then(|info| info.rad_checkpoints.take())
         else {
@@ -39,7 +44,7 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
         for (index, (site, checkpoints)) in sites.into_iter().zip(&table.awaits).enumerate() {
             assert_eq!(site.state.as_usize(), CoroutineArgs::RESERVED_VARIANTS + index);
 
-            let result = emit_await(tcx, body, site, checkpoints, &locations);
+            let result = emit_await(tcx, body, site, checkpoints, &locations, &runtime);
 
             if let Err(err_msg) = result {
                 Logger::error(&format!("state {} skipped: {}", site.state.as_usize(), err_msg));
@@ -57,21 +62,20 @@ fn emit_await<'tcx>(
     site: SuspendSite,
     checkpoints: &AwaitCheckpoints,
     locations: &Locations,
+    runtime: &RuntimeItems,
 ) -> Result<(), String> {
     let this = Env::coroutine_place(body, site.block)?;
 
-    let checkpoint = tcx.get_diagnostic_item(sym::checkpoint).unwrap();
     let start_site = site.new_block(locations.get(checkpoints.loop_head)?.block);
-    emit_checkpoint(tcx, body, start_site, this, "checkpoint", checkpoint, &checkpoints.before)?;
+    emit_checkpoint(tcx, body, start_site, this, "checkpoint", runtime.checkpoint, &checkpoints.before)?;
     
     for end in &checkpoints.ends {
         let location = locations.get(*end)?;
 
         split_at(tcx, body, location);
 
-        let checkpoint = tcx.get_diagnostic_item(sym::await_effects).unwrap();
         let end_site = site.new_block(location.block);
-        emit_checkpoint(tcx, body, end_site, this, "await effects", checkpoint, &checkpoints.effects)?;
+        emit_checkpoint(tcx, body, end_site, this, "await effects", runtime.await_effects, &checkpoints.effects)?;
     }
     Ok(())
 }
