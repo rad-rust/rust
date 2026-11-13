@@ -9,7 +9,6 @@ const CHECKPOINT_MSG: u32 = 0x3;
 const VERDICT_OK: u32 = 0x4;
 const VERDICT_BAD: u32 = 0x5;
 
-// TODO: validate that regions fit checkpoint buffer size
 #[rustc_diagnostic_item = "checkpoint_buffer_size"]
 const BUFFER_SIZE: usize = 2048;
 

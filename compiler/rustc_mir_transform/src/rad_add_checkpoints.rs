@@ -67,7 +67,8 @@ fn emit_await<'tcx>(
     let this = Env::coroutine_place(body, site.block)?;
 
     let start_site = site.new_block(locations.get(checkpoints.loop_head)?.block);
-    emit_checkpoint(tcx, body, start_site, this, "checkpoint", runtime.checkpoint, &checkpoints.before)?;
+    let total_bytes = emit_checkpoint(tcx, body, start_site, this, "checkpoint", runtime.checkpoint, &checkpoints.before)?;
+    validate_payload_size(runtime.buffer_size, total_bytes)?;
     
     for end in &checkpoints.ends {
         let location = locations.get(*end)?;
@@ -109,7 +110,7 @@ fn emit_checkpoint<'tcx>(
     which: &str,
     checkpoint: DefId,
     objects: &[(CheckpointObject, Depth)],
-) -> Result<(), String> {
+) -> Result<u64, String> {
     let span = body.span;
     let source_info = SourceInfo::outermost(span);
 
@@ -214,7 +215,7 @@ fn emit_checkpoint<'tcx>(
         id: None,
     });
 
-    Ok(())
+    Ok(total_bytes)
 }
 
 fn deref_region<'tcx>(
@@ -240,4 +241,15 @@ fn deref_region<'tcx>(
     }
 
     place
+}
+
+fn validate_payload_size(buffer_size: u64, total_bytes: u64) -> Result<(), String> {
+    if total_bytes > buffer_size {
+        return Err(format!(
+            "Payload size of {} exceeds checkpoint buffer size of {}", 
+            total_bytes, 
+            buffer_size
+        ));
+    }
+    Ok(())
 }

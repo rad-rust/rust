@@ -638,6 +638,7 @@ symbols! {
         char,
         checked_type_aliases,
         checkpoint,
+        checkpoint_buffer_size,
         clflushopt_target_feature,
         client,
         clippy,
