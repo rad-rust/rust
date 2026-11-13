@@ -11,8 +11,8 @@ pub struct Runtime;
 impl Runtime {
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "checkpoint"]
-    pub fn checkpoint(site: u32, regions: Regions<'_>) {
-        checkpoint::checkpoint(site, regions);
+    pub fn checkpoint(site: u32, regions: Regions<'_>) -> bool {
+        checkpoint::checkpoint(site, regions)
     }
 
     #[stable(feature = "rad_protected", since = "1.95.0")]

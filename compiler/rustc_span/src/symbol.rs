@@ -1760,6 +1760,7 @@ symbols! {
         require,
         reserve_x18: "reserve-x18",
         residual,
+        restore,
         result,
         result_ffi_guarantees,
         return_address,

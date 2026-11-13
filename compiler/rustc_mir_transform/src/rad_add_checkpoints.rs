@@ -9,13 +9,14 @@ use rustc_middle::mir::*;
 use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::{CoroutineArgs, CoroutineArgsExt, Ty, TyCtxt};
 use rustc_span::{Span, Spanned};
+use rustc_abi::VariantIdx;
 use crate::PassPolicy;
 
 use super::rad_protected::regions::Env;
 use super::rad_protected::suspend_site::{SuspendSite, suspend_sites};
 use super::rad_protected::logger::Logger;
 use super::rad_protected::locate_stmts::Locations;
-use super::rad_protected::runtime_items::RuntimeItems;
+use super::rad_protected::runtime_items::{RuntimeItems, CheckpointFn};
 
 pub(super) struct RadAddCheckpoints;
 
@@ -62,13 +63,16 @@ fn emit_await<'tcx>(
     site: SuspendSite,
     checkpoints: &AwaitCheckpoints,
     locations: &Locations,
-    runtime: &RuntimeItems,
+    runtime: &RuntimeItems<'tcx>,
 ) -> Result<(), String> {
     let this = Env::coroutine_place(body, site.block)?;
 
     let start_site = site.new_block(locations.get(checkpoints.loop_head)?.block);
-    let total_bytes = emit_checkpoint(tcx, body, start_site, this, "checkpoint", runtime.checkpoint, &checkpoints.before)?;
+    let (target, dest, total_bytes) = emit_checkpoint(tcx, body, start_site, this, &runtime.checkpoint, &checkpoints.before)?;
     validate_payload_size(runtime.buffer_size, total_bytes)?;
+
+    let rollback_site = site.new_block(target);
+    emit_rollback(tcx, body, this, rollback_site, dest, runtime.restore)?;
     
     for end in &checkpoints.ends {
         let location = locations.get(*end)?;
@@ -76,7 +80,7 @@ fn emit_await<'tcx>(
         split_at(tcx, body, location);
 
         let end_site = site.new_block(location.block);
-        emit_checkpoint(tcx, body, end_site, this, "await effects", runtime.await_effects, &checkpoints.effects)?;
+        emit_checkpoint(tcx, body, end_site, this, &runtime.await_effects, &checkpoints.effects)?;
     }
     Ok(())
 }
@@ -107,10 +111,9 @@ fn emit_checkpoint<'tcx>(
     body: &mut Body<'tcx>,
     site: SuspendSite,
     this: Place<'tcx>,
-    which: &str,
-    checkpoint: DefId,
-    objects: &[(CheckpointObject, Depth)],
-) -> Result<u64, String> {
+    checkpoint: &CheckpointFn<'tcx>,
+    objects: &[(CheckpointObject, Depth)]
+) -> Result<(BasicBlock, Local, u64), String> {
     let span = body.span;
     let source_info = SourceInfo::outermost(span);
 
@@ -120,7 +123,7 @@ fn emit_checkpoint<'tcx>(
     let n = regions.len() as u64;
     let total_bytes: u64 = regions.iter().map(|r| r.size).sum();
 
-    Logger::info(&format!("state {} ({:?}) {which}: {n} regions, {total_bytes} bytes", site.state.as_usize(), site.block));
+    Logger::info(&format!("state {} ({:?}) {}: {n} regions, {total_bytes} bytes", site.state.as_usize(), site.block, checkpoint.name));
 
     let mut stmts: Vec<Statement<'tcx>> = Vec::new();
     let mut assign = |place: Place<'tcx>, rvalue: Rvalue<'tcx>| {
@@ -183,7 +186,7 @@ fn emit_checkpoint<'tcx>(
         ),
     );
 
-    let dest = new_local(body, tcx.types.unit);
+    let dest = new_local(body, checkpoint.ret_ty);
     let site_arg = Operand::const_from_scalar(
         tcx,
         tcx.types.u32,
@@ -203,7 +206,7 @@ fn emit_checkpoint<'tcx>(
     blocks[site.block].terminator = Some(Terminator {
         source_info,
         kind: TerminatorKind::Call {
-            func: Operand::function_handle(tcx, checkpoint, &[], span),
+            func: Operand::function_handle(tcx, checkpoint.def_id, &[], span),
             args,
             destination: dest.into(),
             target: Some(after),
@@ -215,7 +218,7 @@ fn emit_checkpoint<'tcx>(
         id: None,
     });
 
-    Ok(total_bytes)
+    Ok((after, dest, total_bytes))
 }
 
 fn deref_region<'tcx>(
@@ -252,4 +255,85 @@ fn validate_payload_size(buffer_size: u64, total_bytes: u64) -> Result<(), Strin
         ));
     }
     Ok(())
+}
+
+fn emit_rollback<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, this: Place<'tcx>,  site: SuspendSite, discr: Local, restore: DefId) -> Result<(), String> {
+    let span = body.span;
+    let source_info = SourceInfo::outermost(span);
+
+    let poll_pending = RuntimeItems::poll_pending_variant(tcx, span);
+    let variant_index = previous_variant(site.state)?;
+
+    let rollback = body.basic_blocks_mut().push(BasicBlockData::new_stmts(
+        vec![
+            Statement::new(
+                source_info,
+                StatementKind::SetDiscriminant {
+                    place: Box::new(this),
+                    variant_index,
+                },
+            ),
+            Statement::new(
+                source_info,
+                StatementKind::SetDiscriminant {
+                    place: Box::new(Place::from(RETURN_PLACE)),
+                    variant_index: poll_pending,
+                },
+            ),
+        ],
+        Some(Terminator {
+            source_info,
+            kind: TerminatorKind::Return,
+            loop_hint_attrs: ThinVec::new(),
+            id: None,
+        }),
+        false,
+    ));
+
+    let dest = body.local_decls.push(LocalDecl::new(tcx.types.unit, span));
+    let rollback = body.basic_blocks_mut().push(BasicBlockData::new(
+        Some(Terminator {
+            source_info,
+            kind: TerminatorKind::Call {
+                func: Operand::function_handle(tcx, restore, &[], span),
+                args: vec![].into(),
+                destination: dest.into(),
+                target: Some(rollback),
+                unwind: UnwindAction::Continue,
+                call_source: CallSource::Misc,
+                fn_span: span,
+            },
+            loop_hint_attrs: ThinVec::new(),
+            id: None,
+        }),
+        false,
+    ));
+
+    let blocks = body.basic_blocks_mut();
+    let old_return = blocks[site.block].terminator.take().unwrap();
+    let after = blocks.push(BasicBlockData::new(Some(old_return), false));
+    let discr = Operand::Move(Place::from(discr));
+    blocks[site.block].terminator = Some(Terminator {
+        source_info,
+        kind: TerminatorKind::SwitchInt { 
+            discr, 
+            targets: SwitchTargets::new(
+                vec![(0, rollback)].into_iter(),
+                after,
+            ),
+        },
+        loop_hint_attrs: ThinVec::new(),
+        id: None,
+    });
+    Ok(())
+}
+
+fn previous_variant(state: VariantIdx) -> Result<VariantIdx, String> {
+    Ok(VariantIdx::from_usize(match state.as_usize() {
+        x @ (0 | 1 | 2) => {
+            return Err(format!("Unexpected VariantIndex {x}"))
+        }
+        3 => 0,
+        x => x - 1,
+    }))
 }
