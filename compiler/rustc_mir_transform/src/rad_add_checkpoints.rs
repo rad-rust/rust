@@ -15,7 +15,7 @@ use crate::PassPolicy;
 use super::rad_protected::regions::Env;
 use super::rad_protected::suspend_site::{SuspendSite, suspend_sites};
 use super::rad_protected::logger::Logger;
-use super::rad_protected::locate_stmts::Locations;
+use super::rad_protected::locate_stmts::{Locations, ResolvedLocations};
 use super::rad_protected::runtime_items::{RuntimeItems, CheckpointFn};
 
 pub(super) struct RadAddCheckpoints;
@@ -36,7 +36,14 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
             return;
         };
 
-        let locations = Locations::resolve(&table, body);
+        let locations = match Locations::resolve(&table, body) {
+            Ok(l) => l,
+            Err(err_msg) => {
+                Logger::error(&format!("Failed to resolve locations: {err_msg}"));
+                return;
+            }
+        };
+        
         let sites = suspend_sites(body);
 
         // Make sure that the sites match the actual number of checkpoints
@@ -45,7 +52,7 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
         for (index, (site, checkpoints)) in sites.into_iter().zip(&table.awaits).enumerate() {
             assert_eq!(site.state.as_usize(), CoroutineArgs::RESERVED_VARIANTS + index);
 
-            let result = emit_await(tcx, body, site, checkpoints, &locations, &runtime);
+            let result = emit_await(tcx, body, site, checkpoints, locations.get(index), &runtime);
 
             if let Err(err_msg) = result {
                 Logger::error(&format!("state {} skipped: {}", site.state.as_usize(), err_msg));
@@ -62,30 +69,28 @@ fn emit_await<'tcx>(
     body: &mut Body<'tcx>,
     site: SuspendSite,
     checkpoints: &AwaitCheckpoints,
-    locations: &Locations,
+    locations: &ResolvedLocations,
     runtime: &RuntimeItems<'tcx>,
 ) -> Result<(), String> {
     let this = Env::coroutine_place(body, site.block)?;
 
-    let start_site = site.new_block(locations.get(checkpoints.loop_head)?.block);
+    let start_site = site.new_block(locations.loop_head.unwrap().block);
     let (target, dest, total_bytes) = emit_checkpoint(tcx, body, start_site, this, &runtime.checkpoint, &checkpoints.before)?;
     validate_payload_size(runtime.buffer_size, total_bytes)?;
 
     let rollback_site = site.new_block(target);
     emit_rollback(tcx, body, this, rollback_site, dest, runtime.restore)?;
     
-    for end in &checkpoints.ends {
-        let location = locations.get(*end)?;
+    for end in &locations.ends {
+        split_at(tcx, body, end);
 
-        split_at(tcx, body, location);
-
-        let end_site = site.new_block(location.block);
+        let end_site = site.new_block(end.block);
         emit_checkpoint(tcx, body, end_site, this, &runtime.await_effects, &checkpoints.effects)?;
     }
     Ok(())
 }
 
-fn split_at<'tcx>(_tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, location: Location) {
+fn split_at<'tcx>(_tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, location: &Location) {
     let fallback = SourceInfo::outermost(body.span);
     let blocks = body.basic_blocks_mut();
     let head = &mut blocks[location.block];
