@@ -1,8 +1,6 @@
 use rustc_middle::ty::{Ty, TyCtxt};
 use rustc_hir::def_id::DefId;
-use rustc_span::{sym, Span};
-use rustc_abi::{Size, VariantIdx};
-use rustc_attr_ir::LangItem;
+use rustc_span::sym;
 
 pub(crate) struct RuntimeItems<'tcx> {
     pub checkpoint: CheckpointFn<'tcx>,
@@ -27,13 +25,6 @@ impl<'tcx> RuntimeItems<'tcx> {
             restore: tcx.get_diagnostic_item(sym::restore)?,
             buffer_size: get_checkpoint_buffer_size(tcx)?,
         })
-    }
-
-    pub(crate) fn poll_pending_variant(tcx: TyCtxt<'tcx>, span: Span) -> VariantIdx {
-        let poll_def_id = tcx.require_lang_item(LangItem::Poll, span);
-        let poll_pending_def_id = tcx.require_lang_item(LangItem::PollPending, span);
-        let poll_adt_def = tcx.adt_def(poll_def_id);
-        poll_adt_def.variant_index_with_id(poll_pending_def_id)
     }
 }
 

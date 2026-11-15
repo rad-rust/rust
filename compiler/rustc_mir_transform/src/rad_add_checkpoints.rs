@@ -49,15 +49,20 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
         // Make sure that the sites match the actual number of checkpoints
         assert_eq!(sites.len(), table.awaits.len(), "suspensions don't match the plan");
 
+        let mut restore = generate_starting_restore_site(body);
+
         for (index, (site, checkpoints)) in sites.into_iter().zip(&table.awaits).enumerate() {
             assert_eq!(site.state.as_usize(), CoroutineArgs::RESERVED_VARIANTS + index);
 
-            let result = emit_await(tcx, body, site, checkpoints, locations.get(index), &runtime);
+            let result = emit_await(tcx, body, site, checkpoints, locations.get(index), &runtime, restore);
 
-            if let Err(err_msg) = result {
-                Logger::error(&format!("state {} skipped: {}", site.state.as_usize(), err_msg));
-                break;
-            };
+            restore = match result {
+                Ok(l) => l,
+                Err(err_msg) => {
+                    Logger::error(&format!("state {} skipped: {}", site.state.as_usize(), err_msg));
+                    break;
+                }
+            }
         }
 
         Logger::report(tcx);
@@ -71,7 +76,8 @@ fn emit_await<'tcx>(
     checkpoints: &AwaitCheckpoints,
     locations: &ResolvedLocations,
     runtime: &RuntimeItems<'tcx>,
-) -> Result<(), String> {
+    restore: BasicBlock,
+) -> Result<BasicBlock, String> {
     let this = Env::coroutine_place(body, site.block)?;
 
     let start_site = site.new_block(locations.loop_head.unwrap().block);
@@ -79,15 +85,18 @@ fn emit_await<'tcx>(
     validate_payload_size(runtime.buffer_size, total_bytes)?;
 
     let rollback_site = site.new_block(target);
-    emit_rollback(tcx, body, this, rollback_site, dest, runtime.restore)?;
-    
-    for end in &locations.ends {
-        split_at(tcx, body, end);
+    emit_rollback(tcx, body, this, rollback_site, dest, runtime.restore, restore)?;
 
-        let end_site = site.new_block(end.block);
-        emit_checkpoint(tcx, body, end_site, this, &runtime.await_effects, &checkpoints.effects)?;
-    }
-    Ok(())
+    // TODO: We assume there is only a single restore point
+    assert_eq!(locations.ends.len(), 1);
+    let end = locations.ends.last().unwrap();
+
+    split_at(tcx, body, end);
+
+    let end_site = site.new_block(end.block);
+    let restore = emit_checkpoint(tcx, body, end_site, this, &runtime.await_effects, &checkpoints.effects)?.0;
+
+    Ok(restore)
 }
 
 fn split_at<'tcx>(_tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, location: &Location) {
@@ -262,11 +271,9 @@ fn validate_payload_size(buffer_size: u64, total_bytes: u64) -> Result<(), Strin
     Ok(())
 }
 
-fn emit_rollback<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, this: Place<'tcx>,  site: SuspendSite, discr: Local, restore: DefId) -> Result<(), String> {
+fn emit_rollback<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, this: Place<'tcx>, site: SuspendSite, discr: Local, restore: DefId, restore_head: BasicBlock) -> Result<(), String> {
     let span = body.span;
     let source_info = SourceInfo::outermost(span);
-
-    let poll_pending = RuntimeItems::poll_pending_variant(tcx, span);
     let variant_index = previous_variant(site.state)?;
 
     let rollback = body.basic_blocks_mut().push(BasicBlockData::new_stmts(
@@ -278,17 +285,10 @@ fn emit_rollback<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, this: Place<'tc
                     variant_index,
                 },
             ),
-            Statement::new(
-                source_info,
-                StatementKind::SetDiscriminant {
-                    place: Box::new(Place::from(RETURN_PLACE)),
-                    variant_index: poll_pending,
-                },
-            ),
         ],
         Some(Terminator {
             source_info,
-            kind: TerminatorKind::Return,
+            kind: TerminatorKind::Goto { target: restore_head },
             loop_hint_attrs: ThinVec::new(),
             id: None,
         }),
@@ -341,4 +341,25 @@ fn previous_variant(state: VariantIdx) -> Result<VariantIdx, String> {
         3 => 0,
         x => x - 1,
     }))
+}
+
+fn generate_starting_restore_site<'tcx>(body: &mut Body<'tcx>) -> BasicBlock {
+    let span = body.span;
+    let source_info = SourceInfo::outermost(span);
+
+    let start_block = std::mem::replace(
+        &mut body.basic_blocks_mut()[START_BLOCK],
+        BasicBlockData::new(None, false),
+    );
+
+    let target = body.basic_blocks_mut().push(start_block);
+
+    body.basic_blocks_mut()[START_BLOCK].terminator = Some(Terminator {
+        source_info,
+        kind: TerminatorKind::Goto { target },
+        loop_hint_attrs: ThinVec::new(),
+        id: None,
+    });
+
+    target
 }
