@@ -41,7 +41,9 @@ fn get_checkpoint_buffer_size<'tcx>(tcx: TyCtxt<'tcx>) -> Option<u64> {
     let def_id = tcx.get_diagnostic_item(sym::checkpoint_buffer_size)?;
 
     let val = tcx.const_eval_poly(def_id).ok()?;
-    let bits = val.try_to_bits(Size::from_bits(64))?;
+    let pointer_size = tcx.data_layout.pointer_size();
+    let bits = val.try_to_bits(pointer_size)?;
+
     Some(bits as u64)
 }
 
