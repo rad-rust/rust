@@ -17,6 +17,7 @@ use super::rad_protected::suspend_site::{SuspendSite, suspend_sites};
 use super::rad_protected::logger::Logger;
 use super::rad_protected::locate_stmts::{Locations, ResolvedLocations};
 use super::rad_protected::runtime_items::{RuntimeItems, CheckpointFn};
+use crate::rad_protected::regions::Region;
 
 pub(super) struct RadAddCheckpoints;
 
@@ -49,7 +50,7 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
         // Make sure that the sites match the actual number of checkpoints
         assert_eq!(sites.len(), table.awaits.len(), "suspensions don't match the plan");
 
-        let mut restore = generate_starting_restore_site(body);
+        let mut restore = (generate_starting_restore_site(body), None);
 
         for (index, (site, checkpoints)) in sites.into_iter().zip(&table.awaits).enumerate() {
             assert_eq!(site.state.as_usize(), CoroutineArgs::RESERVED_VARIANTS + index);
@@ -57,7 +58,7 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
             let result = emit_await(tcx, body, site, checkpoints, locations.get(index), &runtime, restore);
 
             restore = match result {
-                Ok(l) => l,
+                Ok(l) => (l.0, Some((l.1, &checkpoints))),
                 Err(err_msg) => {
                     Logger::error(&format!("state {} skipped: {}", site.state.as_usize(), err_msg));
                     break;
@@ -76,16 +77,16 @@ fn emit_await<'tcx>(
     checkpoints: &AwaitCheckpoints,
     locations: &ResolvedLocations,
     runtime: &RuntimeItems<'tcx>,
-    restore: BasicBlock,
-) -> Result<BasicBlock, String> {
+    restore: (BasicBlock, Option<(Local, &AwaitCheckpoints)>),
+) -> Result<(BasicBlock, Local), String> {
     let this = Env::coroutine_place(body, site.block)?;
 
     let start_site = site.new_block(locations.loop_head.unwrap().block);
-    let (target, dest, total_bytes) = emit_checkpoint(tcx, body, start_site, this, &runtime.checkpoint, &checkpoints.before)?;
+    let (target, dest, total_bytes, _) = emit_checkpoint(tcx, body, start_site, this, &runtime.checkpoint, &checkpoints.before)?;
     validate_payload_size(runtime.buffer_size, total_bytes)?;
 
     let rollback_site = site.new_block(target);
-    emit_rollback(tcx, body, this, rollback_site, dest, runtime.restore, restore)?;
+    emit_rollback(tcx, body, this, rollback_site, dest, runtime.restore, restore.0, restore.1)?;
 
     // TODO: We assume there is only a single restore point
     assert_eq!(locations.ends.len(), 1);
@@ -94,9 +95,9 @@ fn emit_await<'tcx>(
     split_at(tcx, body, end);
 
     let end_site = site.new_block(end.block);
-    let restore = emit_checkpoint(tcx, body, end_site, this, &runtime.await_effects, &checkpoints.effects)?.0;
+    let (restore, _, _, regions) = emit_checkpoint(tcx, body, end_site, this, &runtime.await_effects, &checkpoints.effects)?;
 
-    Ok(restore)
+    Ok((restore, regions))
 }
 
 fn split_at<'tcx>(_tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, location: &Location) {
@@ -127,7 +128,7 @@ fn emit_checkpoint<'tcx>(
     this: Place<'tcx>,
     checkpoint: &CheckpointFn<'tcx>,
     objects: &[(CheckpointObject, Depth)]
-) -> Result<(BasicBlock, Local, u64), String> {
+) -> Result<(BasicBlock, Local, u64, Local), String> {
     let span = body.span;
     let source_info = SourceInfo::outermost(span);
 
@@ -138,6 +139,55 @@ fn emit_checkpoint<'tcx>(
     let total_bytes: u64 = regions.iter().map(|r| r.size).sum();
 
     Logger::info(&format!("state {} ({:?}) {}: {n} regions, {total_bytes} bytes", site.state.as_usize(), site.block, checkpoint.name));
+
+    let (slice_ref, stmts) = build_regions(tcx, body, regions);
+
+    let dest = body.local_decls.push(LocalDecl::new(checkpoint.ret_ty, span));
+    let site_arg = Operand::const_from_scalar(
+        tcx,
+        tcx.types.u32,
+        Scalar::from_u32(site.state.as_u32()),
+        span,
+    );
+
+    let slice_ref_op = 
+        if checkpoint.copy {
+            Operand::Copy(slice_ref.into())
+        } else {
+            Operand::Move(slice_ref.into())
+        };
+
+    let args: Box<[Spanned<Operand<'tcx>>]> = Box::new([
+        Spanned { node: site_arg, span },
+        Spanned { node: slice_ref_op, span },
+    ]);
+
+    let blocks = body.basic_blocks_mut();
+    let old_return = blocks[site.block].terminator.take().unwrap();
+    blocks[site.block].statements.extend(stmts);
+    let after = blocks.push(BasicBlockData::new(Some(old_return), false));
+    blocks[site.block].terminator = Some(Terminator {
+        source_info,
+        kind: TerminatorKind::Call {
+            func: Operand::function_handle(tcx, checkpoint.def_id, &[], span),
+            args,
+            destination: dest.into(),
+            target: Some(after),
+            unwind: UnwindAction::Continue,
+            call_source: CallSource::Misc,
+            fn_span: span,
+        },
+        loop_hint_attrs: ThinVec::new(),
+        id: None,
+    });
+
+    Ok((after, dest, total_bytes, slice_ref))
+}
+
+fn build_regions<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, regions: Vec<Region<'tcx>>) -> (Local, Vec<Statement<'tcx>>) {
+    let span = body.span;
+    let source_info = SourceInfo::outermost(span);
+    let n = regions.len() as u64;
 
     let mut stmts: Vec<Statement<'tcx>> = Vec::new();
     let mut assign = |place: Place<'tcx>, rvalue: Rvalue<'tcx>| {
@@ -200,39 +250,7 @@ fn emit_checkpoint<'tcx>(
         ),
     );
 
-    let dest = new_local(body, checkpoint.ret_ty);
-    let site_arg = Operand::const_from_scalar(
-        tcx,
-        tcx.types.u32,
-        Scalar::from_u32(site.state.as_u32()),
-        span,
-    );
-
-    let args: Box<[Spanned<Operand<'tcx>>]> = Box::new([
-        Spanned { node: site_arg, span },
-        Spanned { node: Operand::Move(slice_ref.into()), span },
-    ]);
-
-    let blocks = body.basic_blocks_mut();
-    let old_return = blocks[site.block].terminator.take().unwrap();
-    blocks[site.block].statements.extend(stmts);
-    let after = blocks.push(BasicBlockData::new(Some(old_return), false));
-    blocks[site.block].terminator = Some(Terminator {
-        source_info,
-        kind: TerminatorKind::Call {
-            func: Operand::function_handle(tcx, checkpoint.def_id, &[], span),
-            args,
-            destination: dest.into(),
-            target: Some(after),
-            unwind: UnwindAction::Continue,
-            call_source: CallSource::Misc,
-            fn_span: span,
-        },
-        loop_hint_attrs: ThinVec::new(),
-        id: None,
-    });
-
-    Ok((after, dest, total_bytes))
+    (slice_ref, stmts)
 }
 
 fn deref_region<'tcx>(
@@ -271,12 +289,21 @@ fn validate_payload_size(buffer_size: u64, total_bytes: u64) -> Result<(), Strin
     Ok(())
 }
 
-fn emit_rollback<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, this: Place<'tcx>, site: SuspendSite, discr: Local, restore: DefId, restore_head: BasicBlock) -> Result<(), String> {
+fn emit_rollback<'tcx>(
+    tcx: TyCtxt<'tcx>, 
+    body: &mut Body<'tcx>, 
+    this: Place<'tcx>, 
+    site: SuspendSite, 
+    discr: Local, 
+    restore: DefId, 
+    restore_head: BasicBlock, 
+    await_effects: Option<(Local, &AwaitCheckpoints)>,
+) -> Result<(), String> {
     let span = body.span;
     let source_info = SourceInfo::outermost(span);
     let variant_index = previous_variant(site.state)?;
 
-    let rollback = body.basic_blocks_mut().push(BasicBlockData::new_stmts(
+    let mut rollback = body.basic_blocks_mut().push(BasicBlockData::new_stmts(
         vec![
             Statement::new(
                 source_info,
@@ -295,24 +322,50 @@ fn emit_rollback<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, this: Place<'tc
         false,
     ));
 
-    let dest = body.local_decls.push(LocalDecl::new(tcx.types.unit, span));
-    let rollback = body.basic_blocks_mut().push(BasicBlockData::new(
-        Some(Terminator {
-            source_info,
-            kind: TerminatorKind::Call {
-                func: Operand::function_handle(tcx, restore, &[], span),
-                args: vec![].into(),
-                destination: dest.into(),
-                target: Some(rollback),
-                unwind: UnwindAction::Continue,
-                call_source: CallSource::Misc,
-                fn_span: span,
-            },
-            loop_hint_attrs: ThinVec::new(),
-            id: None,
-        }),
+    // TODO: Generate an AwaitCheckpoints for parameters in the write-set so they can be restored on rollback to fn start
+    // TODO: This recomputes both compile-time and runtime construction of regions. Either cache regions or preserve local over awaits
+    if let Some((await_effects, checkpoints)) = await_effects {
+        let site = SuspendSite { block: rollback, state: variant_index };
+        
+        let env = Env::new(tcx, body, site, &checkpoints.before);
+        let regions = env.get_regions(this)?;
+
+        let (slice_ref, stmts) = build_regions(tcx, body, regions);
+
+        let dest = body.local_decls.push(LocalDecl::new(tcx.types.unit, span));
+        let site_arg = Operand::const_from_scalar(
+            tcx,
+            tcx.types.u32,
+            Scalar::from_u32(site.state.as_u32()),
+            span,
+        );
+
+        let args: Box<[Spanned<Operand<'tcx>>]> = Box::new([
+            Spanned { node: site_arg, span },
+            Spanned { node: Operand::Move(slice_ref.into()), span },
+            Spanned { node: Operand::Move(await_effects.into()), span },
+        ]);
+
+        let blocks = body.basic_blocks_mut();
+        rollback = blocks.push(BasicBlockData::new_stmts(
+            stmts,
+            Some(Terminator {
+                source_info,
+                kind: TerminatorKind::Call {
+                    func: Operand::function_handle(tcx, restore, &[], span),
+                    args,
+                    destination: dest.into(),
+                    target: Some(rollback),
+                    unwind: UnwindAction::Continue,
+                    call_source: CallSource::Misc,
+                    fn_span: span,
+                },
+                loop_hint_attrs: ThinVec::new(),
+                id: None,
+            }),
         false,
-    ));
+        ));
+    }
 
     let blocks = body.basic_blocks_mut();
     let old_return = blocks[site.block].terminator.take().unwrap();

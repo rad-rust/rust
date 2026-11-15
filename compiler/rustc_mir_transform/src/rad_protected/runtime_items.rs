@@ -16,11 +16,13 @@ impl<'tcx> RuntimeItems<'tcx> {
                 def_id: tcx.get_diagnostic_item(sym::checkpoint)?,
                 name: "checkpoint".into(),
                 ret_ty: tcx.types.bool,
+                copy: false,
             },
             await_effects: CheckpointFn {
                 def_id: tcx.get_diagnostic_item(sym::await_effects)?,
                 name: "await effects".into(),
                 ret_ty: tcx.types.unit,
+                copy: true,
             },
             restore: tcx.get_diagnostic_item(sym::restore)?,
             buffer_size: get_checkpoint_buffer_size(tcx)?,
@@ -42,4 +44,5 @@ pub(crate) struct CheckpointFn<'tcx> {
     pub def_id: DefId,
     pub name: String,
     pub ret_ty: Ty<'tcx>,
+    pub copy: bool,
 }

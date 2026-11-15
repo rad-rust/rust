@@ -23,8 +23,8 @@ impl Runtime {
 
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "restore"]
-    pub fn restore() {
-        checkpoint::restore();
+    pub fn restore(site: u32, checkpoint: Regions<'_>, await_effects: Regions<'_>) {
+        checkpoint::restore(site, checkpoint, await_effects);
     }
     
     #[stable(feature = "rad_protected", since = "1.95.0")]
