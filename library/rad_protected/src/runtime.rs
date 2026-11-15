@@ -12,12 +12,14 @@ impl Runtime {
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "checkpoint"]
     pub fn checkpoint(site: u32, regions: Regions<'_>) -> bool {
+        checkpoint::print_checkpoint(site, regions, "checkpoint");
         checkpoint::checkpoint(site, regions)
     }
 
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "await_effects"]
     pub fn await_effects(site: u32, regions: Regions<'_>) {
+        checkpoint::print_checkpoint(site, regions, "await effects");
         checkpoint::snapshot(site, regions, true);
     }
 

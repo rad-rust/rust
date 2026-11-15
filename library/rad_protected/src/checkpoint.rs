@@ -46,8 +46,10 @@ impl Core {
 pub(crate) fn checkpoint(site: u32, regions: Regions<'_>) -> bool {
     if compare_regions(regions) {
         snapshot(site, regions, false);
+        debug_println(format_args!("Continuing: Section {} matches", site));
         true
     } else {
+        debug_println(format_args!("Rollback: Section {} differs", site));
         false
     }
 }
@@ -107,10 +109,16 @@ fn compare_regions(regions: Regions<'_>) -> bool {
 //      1. The delta contains the entire state
 //      2. No skippable restore sites are present
 //      3. There are no heap reallocations
-pub(crate) fn snapshot(_site: u32, regions: Regions<'_>, await_effects: bool) {
+pub(crate) fn snapshot(site: u32, regions: Regions<'_>, await_effects: bool) {
     if !matches!(Core::get_core(), Core::Core0) {
         return;
     }
+
+    debug_println(format_args!(
+        "Snapshot: Copying {} regions to PSRAM for site {}", 
+        if await_effects { "await effects" } else { "checkpoint" }, 
+        site
+    ));
 
     unsafe {
         let mut offset = PSRAM_DATA.before_size;
@@ -132,7 +140,12 @@ pub(crate) fn snapshot(_site: u32, regions: Regions<'_>, await_effects: bool) {
     }
 }
 
-pub(crate) fn restore(_site: u32, checkpoint: Regions<'_>, await_effects: Regions<'_>) {
+pub(crate) fn restore(site: u32, checkpoint: Regions<'_>, await_effects: Regions<'_>) {
+    debug_println(format_args!(
+        "Restore: Restoring regions from PSRAM for site {}",
+        site
+    ));
+    
     unsafe {
         let buffer = ptr::addr_of!(PSRAM_DATA.buffer).cast::<u8>();
         let mut offset = 0usize;
@@ -163,6 +176,17 @@ pub(crate) fn sync() {
             hal::fifo_push_blocking(MSG_BARRIER);
             while hal::fifo_pop_blocking().unwrap() != MSG_ACK { }
         },
+    }
+}
+
+fn debug_println(args: core::fmt::Arguments<'_>) {
+    debug_print(format_args!("{}\n", args));
+}
+
+fn debug_print(args: core::fmt::Arguments<'_>) {
+    if matches!(Core::get_core(), Core::Core0) {
+        let mut w = hal::DeviceWriter;
+        let _ = w.write_fmt(args);
     }
 }
 
