@@ -15,6 +15,17 @@ const BUFFER_SIZE: usize = 2048;
 // Shared SRAM buffer
 static mut CHECKPOINT_BUFFER: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
 
+// Fake PSRAM buffer on SRAM for demo
+static mut PSRAM_DATA: PsramData = PsramData {
+    before_size: 0,
+    buffer: [0; BUFFER_SIZE],
+};
+
+struct PsramData {
+    before_size: usize,
+    buffer: [u8; BUFFER_SIZE],
+}
+
 pub(super) type Regions<'a> = &'a [(*mut u8, usize, bool)];
 
 pub(super) enum Core {
@@ -34,7 +45,7 @@ impl Core {
 
 pub(crate) fn checkpoint(site: u32, regions: Regions<'_>) -> bool {
     if compare_regions(regions) {
-        snapshot(site, regions);
+        snapshot(site, regions, false);
         true
     } else {
         false
@@ -92,12 +103,54 @@ fn compare_regions(regions: Regions<'_>) -> bool {
     }
 }
 
-pub(crate) fn snapshot(_site: u32, _regions: Regions<'_>) {
-    // TODO: snapshot regions
+// TODO: This snapshot/restore implementation is a hacky workaround for the demo. Note that it only works when:
+//      1. The delta contains the entire state
+//      2. No skippable restore sites are present
+//      3. There are no heap reallocations
+pub(crate) fn snapshot(_site: u32, regions: Regions<'_>, await_effects: bool) {
+    if !matches!(Core::get_core(), Core::Core0) {
+        return;
+    }
+
+    unsafe {
+        let mut offset = PSRAM_DATA.before_size;
+        let buffer = ptr::addr_of_mut!(PSRAM_DATA.buffer).cast::<u8>();
+
+        for &(local_ptr, size, _compare) in regions {
+            assert!(offset + size <= BUFFER_SIZE);
+
+            ptr::copy_nonoverlapping(
+                local_ptr.cast_const(),
+                buffer.add(offset),
+                size,
+            );
+
+            offset += size;
+        }
+
+        PSRAM_DATA.before_size = if await_effects { 0 } else { offset };
+    }
 }
 
-pub(crate) fn restore(_site: u32, _checkpoint: Regions<'_>, _await_effects: Regions<'_>) {
-    // TODO: restore regions
+pub(crate) fn restore(_site: u32, checkpoint: Regions<'_>, await_effects: Regions<'_>) {
+    unsafe {
+        let buffer = ptr::addr_of!(PSRAM_DATA.buffer).cast::<u8>();
+        let mut offset = 0usize;
+
+        for regions in [checkpoint, await_effects] {
+            for &(local_ptr, size, _compare) in regions {
+                assert!(offset + size <= BUFFER_SIZE);
+
+                ptr::copy_nonoverlapping(
+                    buffer.add(offset),
+                    local_ptr,
+                    size,
+                );
+
+                offset += size;
+            }
+        }
+    }
 }
 
 pub(crate) fn sync() {

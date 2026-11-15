@@ -18,7 +18,7 @@ impl Runtime {
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "await_effects"]
     pub fn await_effects(site: u32, regions: Regions<'_>) {
-        checkpoint::snapshot(site, regions);
+        checkpoint::snapshot(site, regions, true);
     }
 
     #[stable(feature = "rad_protected", since = "1.95.0")]
