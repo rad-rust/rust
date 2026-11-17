@@ -1,4 +1,5 @@
 use either::Either;
+use rustc_abi::FieldIdx;
 use rustc_attr_ir::lang_items::LangItem;
 use rustc_data_structures::fx::{FxIndexMap, FxIndexSet};
 use rustc_hir as hir;
@@ -8,8 +9,8 @@ use rustc_middle::mir::visit::{MutatingUseContext, NonMutatingUseContext, PlaceC
 use rustc_middle::mir::{
     AwaitCheckpoints, BasicBlock, Body, BodyLoans, CheckpointObject, CheckpointTable, Depth,
     InstructionLoans, LoanId, Local, Location, Mutability, NonDivergingIntrinsic, Operand,
-    OutsideKind, Place, ProjectionElem, Rvalue, START_BLOCK, Statement, StatementKind, Terminator,
-    TerminatorKind,
+    OutsideKind, Place, ProjectionElem, Rvalue, START_BLOCK, Statement, StatementId, StatementKind,
+    Terminator, TerminatorKind,
 };
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{CAPTURE_STRUCT_LOCAL, TyCtxt, TypeVisitableExt};
@@ -37,7 +38,8 @@ impl<'tcx> crate::MirPass<'tcx> for RadWriteSets {
             return;
         }
         let def_id = body.source.def_id();
-        if body.coroutine.is_none()
+        if tracing::enabled!(tracing::Level::DEBUG)
+            && body.coroutine.is_none()
             && !tcx.is_typeck_child(def_id)
             && !tcx.asyncness(def_id).is_async()
         {
@@ -45,8 +47,9 @@ impl<'tcx> crate::MirPass<'tcx> for RadWriteSets {
         }
         let Some(plan) = analyze(tcx, body) else { return };
         // Keep what to copy at each `.await` for the pass inserting the checkpoints
+        let table = plan.table(body).unwrap();
         if let Some(coroutine) = body.coroutine.as_mut() {
-            coroutine.rad_checkpoints = Some(plan.table());
+            coroutine.rad_checkpoints = Some(table);
         }
         with_no_trimmed_paths!(print(tcx, body, &plan));
     }
@@ -212,6 +215,8 @@ struct AwaitPlan<'tcx> {
     ends: Vec<Location>,
     /// Locals live where `effects` is taken that no `Yield` stores in the future yet
     pending: DenseBitSet<Local>,
+    /// The statement Id of the terminator of the basic block the leads into the polling loop
+    loop_head: BasicBlock,
 }
 
 /// The write set of one checkpoint: the writes in the code it covers and what it must copy
@@ -228,20 +233,33 @@ struct WriteSet<'tcx> {
 
 impl CheckpointPlan<'_> {
     /// What to copy at each `.await`, without the details of how it was found
-    fn table(&self) -> CheckpointTable {
+    fn table(&self, body: &Body<'_>) -> Option<CheckpointTable> {
         let list = |write_set: &WriteSet<'_>| -> Vec<_> {
             write_set.objects.iter().map(|(&object, &depth)| (object, depth)).collect()
         };
+        let locs_to_ids = |locs: &Vec<Location>| -> Option<Vec<StatementId>> {
+            locs.iter().map(|&location| id_at(body, location)).collect()
+        };
+        let loop_head_id = |loop_head: BasicBlock| -> Option<StatementId> {
+            id_at(
+                body,
+                Location { block: loop_head, statement_index: body[loop_head].statements.len() },
+            )
+        };
+
         let awaits = self
             .awaits
             .iter()
-            .map(|plan| AwaitCheckpoints {
-                before: list(&plan.before),
-                effects: list(&plan.effects),
-                ends: plan.ends.clone(),
+            .map(|plan| {
+                Some(AwaitCheckpoints {
+                    before: list(&plan.before),
+                    effects: list(&plan.effects),
+                    loop_head: loop_head_id(plan.loop_head)?,
+                    ends: locs_to_ids(&plan.ends)?,
+                })
             })
-            .collect();
-        CheckpointTable { awaits }
+            .collect::<Option<_>>()?;
+        Some(CheckpointTable { awaits })
     }
 }
 
@@ -399,6 +417,20 @@ impl<'tcx> Analysis<'_, 'tcx> {
         }
         let effects = self.write_set(&code, saved, &pending);
 
+        let predecessors = body.basic_blocks.predecessors();
+
+        let mut loop_heads: Vec<_> = predecessors[awaited.head]
+            .iter()
+            .copied()
+            .filter(|&bb_idx| {
+                !awaited.blocks.contains(bb_idx) && !body.basic_blocks[bb_idx].is_cleanup
+            })
+            .collect();
+
+        // TODO: We currently only handle cases with a single loop head
+        assert_eq!(loop_heads.len(), 1);
+        let loop_head = loop_heads.pop().unwrap();
+
         AwaitPlan {
             suspend: awaited.suspend,
             before,
@@ -407,6 +439,7 @@ impl<'tcx> Analysis<'_, 'tcx> {
             effects,
             ends: awaited.ends.clone(),
             pending,
+            loop_head,
         }
     }
 
@@ -465,6 +498,11 @@ impl<'tcx> Analysis<'_, 'tcx> {
         WriteSet { saved, writes, not_saved, objects }
     }
 
+    /// Helper to find the FieldIdx of a Local, see CoroutineSavedLocals::get
+    fn saved_field(saved: &DenseBitSet<Local>, local: Local) -> FieldIdx {
+        FieldIdx::from_usize(saved.iter().take_while(|&l| l < local).count())
+    }
+
     /// Find the saved local or upvar that holds `place` if it's stored in the future here
     fn object(&self, place: Place<'_>, saved: &DenseBitSet<Local>) -> Option<CheckpointObject> {
         if !in_future(place, saved) {
@@ -477,7 +515,11 @@ impl<'tcx> Analysis<'_, 'tcx> {
             };
             return Some(CheckpointObject::Upvar(field));
         }
-        Some(CheckpointObject::Saved(self.liveness.saved_locals.get(place.local)?))
+
+        let field = Self::saved_field(saved, place.local);
+        let slot = self.liveness.saved_locals.get(place.local)?;
+
+        Some(CheckpointObject::Saved(field, slot))
     }
 
     /// Figure out which objects an instruction can write through its pointers
@@ -854,6 +896,7 @@ fn on_cycle(body: &Body<'_>, block: BasicBlock) -> bool {
 /// Prints the summary that calls of a `#[rad::checkpoint]` fn use
 fn print_summary<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
     let def_id = body.source.def_id();
+    // Use `eprintln!` instead of `debug!` to avoid logspam
     eprintln!("=== rad write summary: {} ===", tcx.def_path_str(def_id));
     let Some(summary) = tcx.rad_write_summary(def_id) else {
         eprintln!("  none (needs `-Zpolonius=next`)");

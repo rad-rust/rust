@@ -11,7 +11,7 @@ use rustc_macros::{StableHash, TyDecodable, TyEncodable, TypeFoldable, TypeVisit
 use rustc_span::def_id::{DefId, LocalDefId};
 use rustc_span::{Span, Symbol};
 
-use super::{ConstValue, Local, Location, Mutability, Place, SourceInfo, StatementId};
+use super::{ConstValue, Local, Mutability, Place, SourceInfo, StatementId};
 use crate::ty::{self, CoroutineArgsExt, Ty};
 
 rustc_index::newtype_index! {
@@ -214,8 +214,10 @@ pub struct AwaitCheckpoints {
     pub before: Vec<(CheckpointObject, Depth)>,
     /// The side effects of the `.await` call
     pub effects: Vec<(CheckpointObject, Depth)>,
-    /// The awaitee's `StorageDead`s
-    pub ends: Vec<Location>,
+    /// The statement Id of the terminator of the basic block the leads into the polling loop
+    pub loop_head: StatementId,
+    /// Ids of the statements before which `effects` is taken (the awaitee's `StorageDead`s)
+    pub ends: Vec<StatementId>,
 }
 
 TrivialTypeTraversalImpls! { CheckpointTable }
@@ -226,7 +228,7 @@ pub enum CheckpointObject {
     /// The coroutine's state, which `StateTransform` writes at every suspension
     Discriminant,
     /// A local `StateTransform` stores in the future, as slot `_sN` of the coroutine layout
-    Saved(CoroutineSavedLocal),
+    Saved(FieldIdx, CoroutineSavedLocal),
     /// A captured upvar (an argument of the async fn), or all of them if the field is unknown
     Upvar(Option<FieldIdx>),
     /// Memory outside the future, reached through a reference
