@@ -1,5 +1,5 @@
 use rustc_data_structures::fx::FxHashMap;
-use rustc_middle::mir::{AwaitCheckpoints, Body, CheckpointTable, Location, StatementId};
+use rustc_middle::mir::{AwaitCheckpoints, Body, Location, StatementId};
 
 pub(crate) struct Locations(Vec<ResolvedLocations>);
 
@@ -11,19 +11,18 @@ pub(crate) struct ResolvedLocations {
 
 impl Locations {
     pub(crate) fn resolve<'tcx>(
-        table: &CheckpointTable,
+        awaits: &[&AwaitCheckpoints],
         body: &Body<'tcx>,
     ) -> Result<Self, String> {
-        let mut ids: FxHashMap<_, _> = table
-            .awaits
+        let mut ids: FxHashMap<_, _> = awaits
             .iter()
             .enumerate()
             .flat_map(|(idx, checkpoints)| Self::get_ids(idx, checkpoints))
             .collect();
 
-        Self::check_for_duplicates(&ids, table)?;
+        Self::check_for_duplicates(&ids, awaits)?;
 
-        let mut result = vec![ResolvedLocations::default(); table.awaits.len()];
+        let mut result = vec![ResolvedLocations::default(); awaits.len()];
 
         let mut add_location = |id, bb_idx, stmt_idx| {
             let Some(id) = id else {
@@ -67,9 +66,9 @@ impl Locations {
 
     fn check_for_duplicates(
         ids: &FxHashMap<StatementId, (usize, bool)>,
-        table: &CheckpointTable,
+        awaits: &[&AwaitCheckpoints],
     ) -> Result<(), String> {
-        let expected: usize = table.awaits.iter().map(|a| a.ends.len() + 1).sum();
+        let expected: usize = awaits.iter().map(|a| a.ends.len() + 1).sum();
         if ids.len() != expected {
             return Err("Duplicate StatementIds found in checkpoint table".into());
         }

@@ -39,7 +39,28 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
             return;
         };
 
-        let locations = match Locations::resolve(&table, body) {
+        // Group entries by the ending `.await`
+        let mut groups: Vec<Vec<_>> = Vec::new();
+        for (&(from, to), checkpoints) in &table.intervals {
+            let IntervalBoundary::Await(to) = to else {
+                Logger::error(&format!("an interval in the checkpoint table ends at {to:?}"));
+                return;
+            };
+            if groups.len() <= to {
+                groups.resize_with(to + 1, Vec::new);
+            }
+            groups[to].push((from, checkpoints));
+        }
+        let Some(firsts) = groups
+            .iter()
+            .map(|group| group.first().map(|&(_, checkpoints)| checkpoints))
+            .collect::<Option<Vec<_>>>()
+        else {
+            Logger::error("an `.await` has no interval in the checkpoint table");
+            return;
+        };
+
+        let locations = match Locations::resolve(&firsts, body) {
             Ok(l) => l,
             Err(err_msg) => {
                 Logger::error(&format!("Failed to resolve locations: {err_msg}"));
@@ -50,15 +71,15 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
         let sites = suspend_sites(body);
 
         // Make sure that the sites match the actual number of checkpoints
-        assert_eq!(sites.len(), table.awaits.len(), "suspensions don't match the plan");
+        assert_eq!(sites.len(), groups.len(), "suspensions don't match the plan");
 
         let mut restore = generate_starting_restore_site(body);
 
-        for (index, (site, checkpoints)) in sites.into_iter().zip(&table.awaits).enumerate() {
+        for (index, (site, group)) in sites.into_iter().zip(&groups).enumerate() {
             assert_eq!(site.state.as_usize(), CoroutineArgs::RESERVED_VARIANTS + index);
 
             let result =
-                emit_await(tcx, body, site, checkpoints, locations.get(index), &runtime, restore);
+                emit_await(tcx, body, site, group, locations.get(index), &runtime, restore);
 
             restore = match result {
                 Ok(s) => s,
@@ -77,16 +98,35 @@ fn emit_await<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &mut Body<'tcx>,
     site: SuspendSite,
-    checkpoints: &AwaitCheckpoints,
+    group: &[(IntervalBoundary, &AwaitCheckpoints)],
     locations: &ResolvedLocations,
     runtime: &RuntimeItems<'tcx>,
     restore: RestoreSite<'tcx>,
 ) -> Result<RestoreSite<'tcx>, String> {
     let this = Env::coroutine_place(body, site.block)?;
 
+    // TODO: Switch on the discriminant to pick the interval that ran, instead of the first one
+    let &(_, checkpoints) = group.first().ok_or("no interval ends at this `.await`")?;
+    let agree = group.iter().all(|(_, other)| {
+        other.effects == checkpoints.effects
+            && other.loop_head == checkpoints.loop_head
+            && other.ends == checkpoints.ends
+    });
+    if !agree {
+        return Err(
+            "the intervals of this `.await` disagree on `effects`, `loop_head` or `ends`".into()
+        );
+    }
+
     let start_site = site.new_block(locations.loop_head.unwrap().block);
-    let c_checkpoint =
-        emit_checkpoint(tcx, body, start_site, this, &runtime.checkpoint, &checkpoints.before)?;
+    let c_checkpoint = emit_checkpoint(
+        tcx,
+        body,
+        start_site,
+        this,
+        &runtime.checkpoint,
+        &checkpoints.interval_writes,
+    )?;
     validate_payload_size(runtime.buffer_size, c_checkpoint.total_bytes)?;
 
     let rollback_site = site.new_block(c_checkpoint.target);
@@ -335,7 +375,10 @@ fn emit_rollback<'tcx>(
         )],
         Some(Terminator {
             source_info,
-            kind: TerminatorKind::Goto { target: restore_site.block, loop_hint_attrs: ThinVec::new() },
+            kind: TerminatorKind::Goto {
+                target: restore_site.block,
+                loop_hint_attrs: ThinVec::new(),
+            },
             id: None,
         }),
         false,

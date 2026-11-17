@@ -202,22 +202,35 @@ rustc_index::newtype_index! {
 /// The write set of the two checkpoints at each `.await` of a coroutine.
 #[derive(Clone, Debug, TyEncodable, TyDecodable, StableHash)]
 pub struct CheckpointTable {
-    /// One entry per `.await`, in block order of their `Yield`s, which is also the order of
-    /// `StateTransform`'s suspend states (state `3 + index`)
-    pub awaits: Vec<AwaitCheckpoints>,
+    /// Sorts each interval based on the boundaries of the interval. The `.await`s are in
+    /// block order of their `Yield`s, which is also the order of `StateTransform`'s suspend states
+    /// (state `3 + index`)
+    pub intervals: FxIndexMap<(IntervalBoundary, IntervalBoundary), AwaitCheckpoints>,
 }
 
-/// The two checkpoints of one `.await`
+/// The two checkpoints needed for each interval.
 #[derive(Clone, Debug, TyEncodable, TyDecodable, StableHash)]
 pub struct AwaitCheckpoints {
-    /// Values written to from the last `.await`'s completion to the start of the current `.await`
-    pub before: Vec<(CheckpointObject, Depth)>,
+    /// Values written to from the start of the interval to the start of the current `.await`
+    pub interval_writes: Vec<(CheckpointObject, Depth)>,
     /// The side effects of the `.await` call
     pub effects: Vec<(CheckpointObject, Depth)>,
     /// The statement Id of the terminator of the basic block the leads into the polling loop
     pub loop_head: StatementId,
     /// Ids of the statements before which `effects` is taken (the awaitee's `StorageDead`s)
     pub ends: Vec<StatementId>,
+}
+
+/// Where an interval of code between checkpoints starts or ends
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, TyEncodable, TyDecodable, StableHash)]
+pub enum IntervalBoundary {
+    /// The function entry, which only starts an interval
+    Entry,
+    /// The `.await` with this index: an interval starts at its awaitee's `StorageDead` and ends at
+    /// its loop head
+    Await(usize),
+    /// The function return, which only ends an interval
+    Return,
 }
 
 TrivialTypeTraversalImpls! { CheckpointTable }
