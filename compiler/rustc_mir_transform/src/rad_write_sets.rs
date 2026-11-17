@@ -8,9 +8,9 @@ use rustc_index::bit_set::DenseBitSet;
 use rustc_middle::mir::visit::{MutatingUseContext, NonMutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
     AwaitCheckpoints, BasicBlock, Body, BodyLoans, CheckpointObject, CheckpointTable, Depth,
-    InstructionLoans, LoanId, Local, Location, Mutability, NonDivergingIntrinsic, Operand,
-    OutsideKind, Place, ProjectionElem, Rvalue, START_BLOCK, Statement, StatementId, StatementKind,
-    Terminator, TerminatorKind,
+    InstructionLoans, IntervalBoundary, LoanId, Local, Location, Mutability, NonDivergingIntrinsic,
+    Operand, OutsideKind, Place, ProjectionElem, Rvalue, START_BLOCK, Statement, StatementId,
+    StatementKind, Terminator, TerminatorKind,
 };
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{CAPTURE_STRUCT_LOCAL, TyCtxt, TypeVisitableExt};
@@ -203,12 +203,9 @@ struct CheckpointPlan<'tcx> {
 struct AwaitPlan<'tcx> {
     /// The block where the `.await` has a `Yield`
     suspend: BasicBlock,
-    /// Taken where the poll loop is entered: what the code since the previous `.await` wrote
-    before: WriteSet<'tcx>,
-    /// The code of `before` starts at the function entry
-    from_entry: bool,
-    /// The earlier `.await`s whose end the code of `before` starts at
-    after: Vec<usize>,
+    /// What the code wrote since every previous `.await` we can come up with. We group it to
+    /// avoid recomputing effects for every interval.
+    intervals: Vec<IntervalPlan<'tcx>>,
     /// Taken once the awaitee is dead: what the `.await` itself wrote
     effects: WriteSet<'tcx>,
     /// The awaitee's `StorageDead`, where `effects` is taken
@@ -217,6 +214,12 @@ struct AwaitPlan<'tcx> {
     pending: DenseBitSet<Local>,
     /// The statement Id of the terminator of the basic block the leads into the polling loop
     loop_head: BasicBlock,
+}
+
+/// The code from one start to an `.await`, and its write set
+struct IntervalPlan<'tcx> {
+    from: IntervalBoundary,
+    write_set: WriteSet<'tcx>,
 }
 
 /// The write set of one checkpoint: the writes in the code it covers and what it must copy
@@ -247,19 +250,20 @@ impl CheckpointPlan<'_> {
             )
         };
 
-        let awaits = self
-            .awaits
-            .iter()
-            .map(|plan| {
-                Some(AwaitCheckpoints {
-                    before: list(&plan.before),
+        // Generate set of all intervals and create `AwaitCheckpoints` objects
+        let mut intervals = FxIndexMap::default();
+        for (to, plan) in self.awaits.iter().enumerate() {
+            for interval in &plan.intervals {
+                let checkpoints = AwaitCheckpoints {
+                    interval_writes: list(&interval.write_set),
                     effects: list(&plan.effects),
                     loop_head: loop_head_id(plan.loop_head)?,
                     ends: locs_to_ids(&plan.ends)?,
-                })
-            })
-            .collect::<Option<_>>()?;
-        Some(CheckpointTable { awaits })
+                };
+                intervals.insert((interval.from, IntervalBoundary::Await(to)), checkpoints);
+            }
+        }
+        Some(CheckpointTable { intervals })
     }
 }
 
@@ -355,21 +359,18 @@ impl<'tcx> Analysis<'_, 'tcx> {
     ) -> AwaitPlan<'tcx> {
         let body = self.body;
 
-        // `before`: back from the loop's entry edges to the end of an earlier `.await` or the
-        // function entry
-        let mut code = Vec::new();
+        // Backwards walk from the loop's entry edges to find potential start points for this `await`
+        let mut first_of = FxIndexMap::default();
         let (mut from_entry, mut after) = (false, Vec::new());
-        let mut seen = DenseBitSet::new_empty(body.basic_blocks.len());
         let mut stack: Vec<BasicBlock> = body.basic_blocks.predecessors()[awaited.head]
             .iter()
             .copied()
             .filter(|&pred| !awaited.blocks.contains(pred))
             .collect();
         while let Some(bb) = stack.pop() {
-            if !seen.insert(bb) || self.inside.contains(bb) {
+            if first_of.contains_key(&bb) || self.inside.contains(bb) {
                 continue;
             }
-            let data = &body[bb];
             let first = match self.end_of.get(&bb) {
                 // An earlier `.await` ends here, so only what follows its `StorageDead` counts
                 Some(&(earlier, dead)) => {
@@ -384,13 +385,53 @@ impl<'tcx> Analysis<'_, 'tcx> {
                     0
                 }
             };
-            code.extend(
-                (first..=data.statements.len())
-                    .map(|statement_index| Location { block: bb, statement_index }),
-            );
+            first_of.insert(bb, first);
         }
+        after.sort_unstable();
+
+        // Do a forward walk from each starting `await` and generate unique write sets for each one.
         let no_pending = DenseBitSet::new_empty(body.local_decls.len());
-        let before = self.write_set(&code, saved_at(body, &self.liveness, index), &no_pending);
+        let origins = from_entry
+            .then_some(IntervalBoundary::Entry)
+            .into_iter()
+            .chain(after.into_iter().map(IntervalBoundary::Await));
+        let intervals = origins
+            .map(|from| {
+                let mut stack: Vec<BasicBlock> = match from {
+                    IntervalBoundary::Entry => vec![START_BLOCK],
+                    IntervalBoundary::Await(earlier) => self
+                        .end_of
+                        .iter()
+                        .filter(|&(bb, &(index, _))| index == earlier && first_of.contains_key(bb))
+                        .map(|(&bb, _)| bb)
+                        .collect(),
+                    IntervalBoundary::Return => {
+                        span_bug!(body.span, "an interval starts at the function return")
+                    }
+                };
+                let mut seen = DenseBitSet::new_empty(body.basic_blocks.len());
+                let mut code = Vec::new();
+                while let Some(bb) = stack.pop() {
+                    let Some(&first) = first_of.get(&bb) else { continue };
+                    if !seen.insert(bb) {
+                        continue;
+                    }
+                    code.extend(
+                        (first..=body[bb].statements.len())
+                            .map(|statement_index| Location { block: bb, statement_index }),
+                    );
+                    // Stop at the end of another `.await`, which starts an interval of its own
+                    stack.extend(
+                        body[bb]
+                            .terminator()
+                            .successors()
+                            .filter(|succ| !self.end_of.contains_key(succ)),
+                    );
+                }
+                let saved = saved_at(body, &self.liveness, index);
+                IntervalPlan { from, write_set: self.write_set(&code, saved, &no_pending) }
+            })
+            .collect();
 
         // `effects`: the loop without its `Yield`, and the code after it until the awaitee is dead
         let mut code = Vec::new();
@@ -433,9 +474,7 @@ impl<'tcx> Analysis<'_, 'tcx> {
 
         AwaitPlan {
             suspend: awaited.suspend,
-            before,
-            from_entry,
-            after,
+            intervals,
             effects,
             ends: awaited.ends.clone(),
             pending,
@@ -938,13 +977,15 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, plan: &CheckpointPlan<'tcx>
             source_map.span_to_diagnostic_string(body[suspend].terminator().source_info.span);
         eprintln!("  .await {index} ({suspend:?}) at {span}");
 
-        let starts = awaited
-            .from_entry
-            .then(|| "entry".to_string())
-            .into_iter()
-            .chain(awaited.after.iter().map(|earlier| format!("end of .await {earlier}")));
-        eprintln!("    before, since {}:", starts.collect::<Vec<_>>().join(", "));
-        print_write_set(tcx, body, plan.loans, &awaited.before);
+        for interval in &awaited.intervals {
+            let start = match interval.from {
+                IntervalBoundary::Entry => "entry".to_string(),
+                IntervalBoundary::Await(earlier) => format!("end of .await {earlier}"),
+                IntervalBoundary::Return => "return".to_string(),
+            };
+            eprintln!("    before, since {start}:");
+            print_write_set(tcx, body, plan.loans, &interval.write_set);
+        }
 
         eprintln!("    effects, until {:?}:", awaited.ends);
         if !awaited.pending.is_empty() {
