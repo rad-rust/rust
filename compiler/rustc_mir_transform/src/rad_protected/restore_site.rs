@@ -23,8 +23,7 @@ pub(crate) fn generate_starting_restore_site<'tcx>(body: &mut Body<'tcx>) -> Res
 
     body.basic_blocks_mut()[START_BLOCK].terminator = Some(Terminator {
         source_info,
-        kind: TerminatorKind::Goto { target },
-        loop_hint_attrs: ThinVec::new(),
+        kind: TerminatorKind::Goto { target, loop_hint_attrs: ThinVec::new() },
         id: None,
     });
 

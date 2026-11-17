@@ -2,7 +2,6 @@ use rustc_abi::FieldIdx;
 use rustc_middle::mir::{
     BasicBlock, Body, CheckpointObject, CoroutineLayout, Depth, Place, PlaceElem, StatementKind,
 };
-use rustc_middle::ty::consts::ConstExt;
 use rustc_middle::ty::{self, Ty, TyCtxt, TypingEnv};
 
 use super::logger::Logger;

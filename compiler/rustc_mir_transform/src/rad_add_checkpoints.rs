@@ -125,8 +125,7 @@ fn split_at<'tcx>(_tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, location: &Location
 
     blocks[location.block].terminator = Some(Terminator {
         source_info,
-        kind: TerminatorKind::Goto { target: tail },
-        loop_hint_attrs: ThinVec::new(),
+        kind: TerminatorKind::Goto { target: tail, loop_hint_attrs: ThinVec::new() },
         id: None,
     });
 }
@@ -193,7 +192,6 @@ fn emit_checkpoint<'tcx>(
             call_source: CallSource::Misc,
             fn_span: span,
         },
-        loop_hint_attrs: ThinVec::new(),
         id: None,
     });
 
@@ -337,8 +335,7 @@ fn emit_rollback<'tcx>(
         )],
         Some(Terminator {
             source_info,
-            kind: TerminatorKind::Goto { target: restore_site.block },
-            loop_hint_attrs: ThinVec::new(),
+            kind: TerminatorKind::Goto { target: restore_site.block, loop_hint_attrs: ThinVec::new() },
             id: None,
         }),
         false,
@@ -378,7 +375,6 @@ fn emit_rollback<'tcx>(
                     call_source: CallSource::Misc,
                     fn_span: span,
                 },
-                loop_hint_attrs: ThinVec::new(),
                 id: None,
             }),
             false,
@@ -395,7 +391,6 @@ fn emit_rollback<'tcx>(
             discr,
             targets: SwitchTargets::new(vec![(0, rollback)].into_iter(), after),
         },
-        loop_hint_attrs: ThinVec::new(),
         id: None,
     });
     Ok(())

@@ -259,7 +259,6 @@ dependencies = [
 name = "rad_protected"
 version = "0.0.0"
 dependencies = [
- "alloc",
  "compiler_builtins",
  "core",
 ]
