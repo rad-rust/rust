@@ -1,7 +1,8 @@
 use rustc_data_structures::thin_vec::ThinVec;
 use rustc_middle::mir::{
-    Body, BasicBlock, Local, SourceInfo, START_BLOCK, Terminator, TerminatorKind, BasicBlockData
+    BasicBlock, BasicBlockData, Body, Local, START_BLOCK, SourceInfo, Terminator, TerminatorKind,
 };
+
 use crate::rad_protected::regions::Region;
 
 pub(crate) struct RestoreSite<'tcx> {

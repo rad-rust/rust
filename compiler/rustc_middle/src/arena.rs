@@ -20,6 +20,7 @@ rustc_arena::declare_arena! {
     steal_thir: rustc_data_structures::steal::Steal<rustc_middle::thir::Thir<'tcx>>,
     steal_mir: rustc_data_structures::steal::Steal<rustc_middle::mir::Body<'tcx>>,
     mir: rustc_middle::mir::Body<'tcx>,
+    rad_write_summary: rustc_middle::mir::RadWriteSummary,
     steal_promoted:
         rustc_data_structures::steal::Steal<
             rustc_index::IndexVec<
@@ -39,10 +40,10 @@ rustc_arena::declare_arena! {
             rustc_middle::middle::resolve::ResolverAstLowering<'tcx>
         >,
     index_ast:
-        rustc_data_structures::steal::Steal<(
+        Option<rustc_data_structures::steal::Steal<(
             std::sync::Arc<rustc_middle::middle::resolve::ResolverAstLowering<'tcx>>,
             rustc_middle::middle::resolve::AstOwner
-        )>,
+        )>>,
     crate_alone: rustc_data_structures::steal::Steal<rustc_ast::Crate>,
     crate_for_resolver: rustc_data_structures::steal::Steal<(rustc_ast::Crate, rustc_ast::AttrVec)>,
     resolutions: rustc_middle::middle::resolve::ResolverGlobalCtxt,

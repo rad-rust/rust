@@ -21,6 +21,65 @@ pub(crate) struct UnconditionalRecursion {
 }
 
 #[derive(Diagnostic)]
+#[diag("`unsafe` code in a `#[rad::checkpoint]` function")]
+#[note("checkpoints cannot reason about writes through raw pointers")]
+pub(crate) struct RadUnsafe {
+    #[primary_span]
+    #[label("`unsafe` here")]
+    pub span: Span,
+    /// The marked fn, unless the `unsafe` is its own header
+    #[label("this function has `#[rad::checkpoint]`")]
+    pub item: Option<Span>,
+}
+
+#[derive(Diagnostic)]
+#[diag("`#[rad::checkpoint]` requires `-Zpolonius=next`")]
+#[note("checkpoints use the loans that only `-Zpolonius=next` records")]
+pub(crate) struct RadNeedsPolonius {
+    #[primary_span]
+    #[label("this function has `#[rad::checkpoint]`")]
+    pub span: Span,
+}
+
+#[derive(Diagnostic)]
+#[diag("interior mutability in a `#[rad::checkpoint]` function")]
+#[note("`{$ty}` can be changed through a shared reference, which checkpoints do not support")]
+pub(crate) struct RadInteriorMut<'tcx> {
+    #[primary_span]
+    #[label("this has type `{$ty}`")]
+    pub span: Span,
+    #[label("this function has `#[rad::checkpoint]`")]
+    pub item: Span,
+    pub ty: Ty<'tcx>,
+}
+
+#[derive(Diagnostic)]
+#[diag("static with interior mutability in a `#[rad::checkpoint]` function")]
+#[note(
+    "checkpoints do not cover statics; keep task state in the task, and share it through a mailbox"
+)]
+pub(crate) struct RadStatic<'tcx> {
+    #[primary_span]
+    #[label("this static has type `{$ty}`")]
+    pub span: Span,
+    #[label("this function has `#[rad::checkpoint]`")]
+    pub item: Span,
+    pub ty: Ty<'tcx>,
+}
+
+#[derive(Diagnostic)]
+#[diag("heap type in a `#[rad::checkpoint]` function")]
+#[note("`#[rad::checkpoint]` tasks are `no_std` and have no allocator")]
+pub(crate) struct RadHeap<'tcx> {
+    #[primary_span]
+    #[label("this has type `{$ty}`")]
+    pub span: Span,
+    #[label("this function has `#[rad::checkpoint]`")]
+    pub item: Span,
+    pub ty: Ty<'tcx>,
+}
+
+#[derive(Diagnostic)]
 #[diag("`{$callee}` is incompatible with `#[rustc_force_inline]`")]
 #[note("incompatible due to: {$reason}")]
 pub(crate) struct InvalidForceInline {

@@ -1,6 +1,7 @@
 //! Inserts the checkpoints `RadWriteSets` planned. Runs after `StateTransform`, which has turned
 //! each suspension into a write of the coroutine's state followed by a return.
 
+use rustc_abi::VariantIdx;
 use rustc_data_structures::thin_vec::ThinVec;
 use rustc_hir::def_id::DefId;
 use rustc_index::IndexVec;
@@ -9,22 +10,22 @@ use rustc_middle::mir::*;
 use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::{CoroutineArgs, CoroutineArgsExt, Ty, TyCtxt};
 use rustc_span::{Span, Spanned};
-use rustc_abi::VariantIdx;
-use crate::PassPolicy;
 
-use super::rad_protected::regions::Env;
-use super::rad_protected::suspend_site::{SuspendSite, suspend_sites};
-use super::rad_protected::logger::Logger;
 use super::rad_protected::locate_stmts::{Locations, ResolvedLocations};
-use super::rad_protected::runtime_items::{RuntimeItems, CheckpointFn};
+use super::rad_protected::logger::Logger;
+use super::rad_protected::regions::Env;
+use super::rad_protected::runtime_items::{CheckpointFn, RuntimeItems};
+use super::rad_protected::suspend_site::{SuspendSite, suspend_sites};
+use crate::PassPolicy;
 use crate::rad_protected::regions::Region;
 use crate::rad_protected::restore_site::{RestoreSite, generate_starting_restore_site};
 
 pub(super) struct RadAddCheckpoints;
 
 impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
-    fn policy(&self, ctx: &crate::PassCtx<'_>) -> PassPolicy {
-        PassPolicy::optional(ctx.opts.unstable_opts.rad_write_sets)
+    fn policy(&self, _ctx: &crate::PassCtx<'_>) -> PassPolicy {
+        // Bodies without `#[rad::checkpoint]` are skipped in `run_pass`
+        PassPolicy::optional(true)
     }
 
     fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
@@ -45,7 +46,7 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
                 return;
             }
         };
-        
+
         let sites = suspend_sites(body);
 
         // Make sure that the sites match the actual number of checkpoints
@@ -56,7 +57,8 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
         for (index, (site, checkpoints)) in sites.into_iter().zip(&table.awaits).enumerate() {
             assert_eq!(site.state.as_usize(), CoroutineArgs::RESERVED_VARIANTS + index);
 
-            let result = emit_await(tcx, body, site, checkpoints, locations.get(index), &runtime, restore);
+            let result =
+                emit_await(tcx, body, site, checkpoints, locations.get(index), &runtime, restore);
 
             restore = match result {
                 Ok(s) => s,
@@ -83,7 +85,8 @@ fn emit_await<'tcx>(
     let this = Env::coroutine_place(body, site.block)?;
 
     let start_site = site.new_block(locations.loop_head.unwrap().block);
-    let c_checkpoint = emit_checkpoint(tcx, body, start_site, this, &runtime.checkpoint, &checkpoints.before)?;
+    let c_checkpoint =
+        emit_checkpoint(tcx, body, start_site, this, &runtime.checkpoint, &checkpoints.before)?;
     validate_payload_size(runtime.buffer_size, c_checkpoint.total_bytes)?;
 
     let rollback_site = site.new_block(c_checkpoint.target);
@@ -96,7 +99,8 @@ fn emit_await<'tcx>(
     split_at(tcx, body, end);
 
     let end_site = site.new_block(end.block);
-    let ae_checkpoint = emit_checkpoint(tcx, body, end_site, this, &runtime.await_effects, &checkpoints.effects)?;
+    let ae_checkpoint =
+        emit_checkpoint(tcx, body, end_site, this, &runtime.await_effects, &checkpoints.effects)?;
 
     let restore_site = RestoreSite {
         block: ae_checkpoint.target,
@@ -141,7 +145,7 @@ fn emit_checkpoint<'tcx>(
     site: SuspendSite,
     this: Place<'tcx>,
     checkpoint: &CheckpointFn<'tcx>,
-    objects: &[(CheckpointObject, Depth)]
+    objects: &[(CheckpointObject, Depth)],
 ) -> Result<CheckpointData<'tcx>, String> {
     let span = body.span;
     let source_info = SourceInfo::outermost(span);
@@ -152,29 +156,27 @@ fn emit_checkpoint<'tcx>(
     let n = regions.len() as u64;
     let total_bytes: u64 = regions.iter().map(|r| r.size).sum();
 
-    Logger::info(&format!("state {} ({:?}) {}: {n} regions, {total_bytes} bytes", site.state.as_usize(), site.block, checkpoint.name));
+    Logger::info(&format!(
+        "state {} ({:?}) {}: {n} regions, {total_bytes} bytes",
+        site.state.as_usize(),
+        site.block,
+        checkpoint.name
+    ));
 
     let (slice_ref, stmts) = build_regions(tcx, body, &regions);
 
     let dest = body.local_decls.push(LocalDecl::new(checkpoint.ret_ty, span));
-    let site_arg = Operand::const_from_scalar(
-        tcx,
-        tcx.types.u32,
-        Scalar::from_u32(site.state.as_u32()),
-        span,
-    );
+    let site_arg =
+        Operand::const_from_scalar(tcx, tcx.types.u32, Scalar::from_u32(site.state.as_u32()), span);
 
-    let slice_ref_op = 
-        if checkpoint.copy {
-            Operand::Copy(slice_ref.into())
-        } else {
-            Operand::Move(slice_ref.into())
-        };
+    let slice_ref_op = if checkpoint.copy {
+        Operand::Copy(slice_ref.into())
+    } else {
+        Operand::Move(slice_ref.into())
+    };
 
-    let args: Box<[Spanned<Operand<'tcx>>]> = Box::new([
-        Spanned { node: site_arg, span },
-        Spanned { node: slice_ref_op, span },
-    ]);
+    let args: Box<[Spanned<Operand<'tcx>>]> =
+        Box::new([Spanned { node: site_arg, span }, Spanned { node: slice_ref_op, span }]);
 
     let blocks = body.basic_blocks_mut();
     let old_return = blocks[site.block].terminator.take().unwrap();
@@ -195,10 +197,20 @@ fn emit_checkpoint<'tcx>(
         id: None,
     });
 
-    Ok(CheckpointData { target: after , dest, total_bytes, ae_regions: slice_ref, c_regions: regions })
+    Ok(CheckpointData {
+        target: after,
+        dest,
+        total_bytes,
+        ae_regions: slice_ref,
+        c_regions: regions,
+    })
 }
 
-fn build_regions<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, regions: &Vec<Region<'tcx>>) -> (Local, Vec<Statement<'tcx>>) {
+fn build_regions<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &mut Body<'tcx>,
+    regions: &Vec<Region<'tcx>>,
+) -> (Local, Vec<Statement<'tcx>>) {
     let span = body.span;
     let source_info = SourceInfo::outermost(span);
     let n = regions.len() as u64;
@@ -252,7 +264,10 @@ fn build_regions<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, regions: &Vec<R
 
     // &[_; n] -> &[_]
     let array_ref = new_local(body, Ty::new_imm_ref(tcx, tcx.lifetimes.re_erased, array_ty));
-    assign(array_ref.into(), Rvalue::Ref(tcx.lifetimes.re_erased, BorrowKind::Shared, array.into()));
+    assign(
+        array_ref.into(),
+        Rvalue::Ref(tcx.lifetimes.re_erased, BorrowKind::Shared, array.into()),
+    );
     let slice_ref_ty = Ty::new_imm_ref(tcx, tcx.lifetimes.re_erased, Ty::new_slice(tcx, pair_ty));
     let slice_ref = new_local(body, slice_ref_ty);
     assign(
@@ -274,17 +289,17 @@ fn deref_region<'tcx>(
     mut place: Place<'tcx>,
     assign: &mut impl FnMut(Place<'tcx>, Rvalue<'tcx>),
 ) -> Place<'tcx> {
-    while let Some(i) = place.projection.iter().skip(1).position(|elem| matches!(elem, PlaceElem::Deref)) {
+    while let Some(i) =
+        place.projection.iter().skip(1).position(|elem| matches!(elem, PlaceElem::Deref))
+    {
         let i = i + 1;
 
-        let prefix = Place { local: place.local, projection: tcx.mk_place_elems(&place.projection[..i]) };
+        let prefix =
+            Place { local: place.local, projection: tcx.mk_place_elems(&place.projection[..i]) };
         let ref_ty = prefix.ty(&body.local_decls, tcx).ty;
 
         let tmp = body.local_decls.push(LocalDecl::new(ref_ty, span));
-        assign(
-            tmp.into(),
-            Rvalue::Use(Operand::Copy(prefix), WithRetag::No),
-        );
+        assign(tmp.into(), Rvalue::Use(Operand::Copy(prefix), WithRetag::No));
 
         place = Place { local: tmp, projection: tcx.mk_place_elems(&place.projection[i..]) };
     }
@@ -295,20 +310,19 @@ fn deref_region<'tcx>(
 fn validate_payload_size(buffer_size: u64, total_bytes: u64) -> Result<(), String> {
     if total_bytes > buffer_size {
         return Err(format!(
-            "Payload size of {} exceeds checkpoint buffer size of {}", 
-            total_bytes, 
-            buffer_size
+            "Payload size of {} exceeds checkpoint buffer size of {}",
+            total_bytes, buffer_size
         ));
     }
     Ok(())
 }
 
 fn emit_rollback<'tcx>(
-    tcx: TyCtxt<'tcx>, 
-    body: &mut Body<'tcx>, 
-    this: Place<'tcx>, 
-    site: SuspendSite, 
-    discr: Local, 
+    tcx: TyCtxt<'tcx>,
+    body: &mut Body<'tcx>,
+    this: Place<'tcx>,
+    site: SuspendSite,
+    discr: Local,
     restore: DefId,
     restore_site: RestoreSite<'tcx>,
 ) -> Result<(), String> {
@@ -317,15 +331,10 @@ fn emit_rollback<'tcx>(
     let variant_index = previous_variant(site.state)?;
 
     let mut rollback = body.basic_blocks_mut().push(BasicBlockData::new_stmts(
-        vec![
-            Statement::new(
-                source_info,
-                StatementKind::SetDiscriminant {
-                    place: Box::new(this),
-                    variant_index,
-                },
-            ),
-        ],
+        vec![Statement::new(
+            source_info,
+            StatementKind::SetDiscriminant { place: Box::new(this), variant_index },
+        )],
         Some(Terminator {
             source_info,
             kind: TerminatorKind::Goto { target: restore_site.block },
@@ -372,7 +381,7 @@ fn emit_rollback<'tcx>(
                 loop_hint_attrs: ThinVec::new(),
                 id: None,
             }),
-        false,
+            false,
         ));
     }
 
@@ -382,12 +391,9 @@ fn emit_rollback<'tcx>(
     let discr = Operand::Move(Place::from(discr));
     blocks[site.block].terminator = Some(Terminator {
         source_info,
-        kind: TerminatorKind::SwitchInt { 
-            discr, 
-            targets: SwitchTargets::new(
-                vec![(0, rollback)].into_iter(),
-                after,
-            ),
+        kind: TerminatorKind::SwitchInt {
+            discr,
+            targets: SwitchTargets::new(vec![(0, rollback)].into_iter(), after),
         },
         loop_hint_attrs: ThinVec::new(),
         id: None,
@@ -399,9 +405,7 @@ fn emit_rollback<'tcx>(
 // can be skipped (e.g. if c { a.await } b.await). In the future, we will SwitchInt to region-building stubs at runtime
 fn previous_variant(state: VariantIdx) -> Result<VariantIdx, String> {
     Ok(VariantIdx::from_usize(match state.as_usize() {
-        x @ (0 | 1 | 2) => {
-            return Err(format!("Unexpected VariantIndex {x}"))
-        }
+        x @ (0 | 1 | 2) => return Err(format!("Unexpected VariantIndex {x}")),
         3 => 0,
         x => x - 1,
     }))

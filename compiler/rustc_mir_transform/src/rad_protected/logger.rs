@@ -3,9 +3,7 @@ use std::sync::Mutex;
 
 use rustc_middle::ty::TyCtxt;
 
-static LOGGER_STATE: Mutex<LoggerState> = Mutex::new(LoggerState {
-    err_encountered: false
-});
+static LOGGER_STATE: Mutex<LoggerState> = Mutex::new(LoggerState { err_encountered: false });
 
 #[derive(Default)]
 struct LoggerState {

@@ -1,5 +1,5 @@
-use core::{ptr, slice};
 use core::fmt::Write;
+use core::{ptr, slice};
 
 use crate::hal;
 
@@ -52,7 +52,7 @@ fn compare_regions(regions: Regions<'_>) -> bool {
                 if !compare {
                     continue;
                 }
-                
+
                 let local = unsafe { slice::from_raw_parts(local_ptr.cast_const(), size) };
 
                 if unsafe { local != &CHECKPOINT_BUFFER[offset..offset + size] } {
@@ -65,7 +65,7 @@ fn compare_regions(regions: Regions<'_>) -> bool {
 
             hal::fifo_push_blocking(VERDICT_OK);
             true
-        },
+        }
         Core::Core1 => {
             let mut offset = 0usize;
 
@@ -103,13 +103,13 @@ pub(crate) fn restore(_site: u32, _checkpoint: Regions<'_>, _await_effects: Regi
 pub(crate) fn sync() {
     match Core::get_core() {
         Core::Core0 => {
-            while hal::fifo_pop_blocking().unwrap() != MSG_BARRIER { }
+            while hal::fifo_pop_blocking().unwrap() != MSG_BARRIER {}
             hal::fifo_push_blocking(MSG_ACK);
-        },
+        }
         Core::Core1 => {
             hal::fifo_push_blocking(MSG_BARRIER);
-            while hal::fifo_pop_blocking().unwrap() != MSG_ACK { }
-        },
+            while hal::fifo_pop_blocking().unwrap() != MSG_ACK {}
+        }
     }
 }
 

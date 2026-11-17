@@ -1,7 +1,5 @@
 #![allow(nonstandard_style)]
 #![allow(unsafe_op_in_unsafe_fn)]
-// miri has some special hacks here that make things unused.
-#![cfg_attr(miri, allow(unused))]
 
 #[cfg(test)]
 mod tests;
@@ -71,7 +69,7 @@ pub use crate::sys::fs::common::exists;
 pub use crate::sys::fs::common::{ExtraHomeDirs, ExtraMediaDirs};
 use crate::sys::helpers::run_path_with_cstr;
 use crate::sys::time::SystemTime;
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::sys::weak::syscall;
 #[cfg(target_os = "android")]
 use crate::sys::weak::weak;
@@ -988,7 +986,6 @@ impl Drop for DirStream {
     fn drop(&mut self) {
         // dirfd isn't supported everywhere
         #[cfg(not(any(
-            miri,
             target_os = "redox",
             target_os = "nto",
             target_os = "qnx",
@@ -1030,16 +1027,13 @@ impl DirEntry {
     pub fn metadata(&self) -> io::Result<FileAttr> {
         cfg_select! {
             // Use directory handle where possible
-            all(
-                any(
-                    all(target_os = "linux", not(target_env = "musl")),
-                    target_os = "android",
-                    target_os = "fuchsia",
-                    target_os = "hurd",
-                    target_os = "illumos",
-                    target_vendor = "apple",
-                ),
-                not(miri) // no dirfd on Miri
+            any(
+                all(target_os = "linux", not(target_env = "musl")),
+                target_os = "android",
+                target_os = "fuchsia",
+                target_os = "hurd",
+                target_os = "illumos",
+                target_vendor = "apple",
             ) => {
                 let fd = cvt(unsafe { dirfd(self.dir.dirp.0) })?;
 
@@ -1315,6 +1309,7 @@ impl File {
                 target_os = "cygwin",
                 target_os = "illumos",
                 target_os = "aix",
+                target_os = "haiku",
                 target_os = "android",
                 target_os = "redox",
                 target_vendor = "apple",
@@ -1338,6 +1333,7 @@ impl File {
                 target_os = "cygwin",
                 target_os = "illumos",
                 target_os = "aix",
+                target_os = "haiku",
                 target_os = "android",
                 target_os = "redox",
                 target_vendor = "apple",
@@ -1361,6 +1357,7 @@ impl File {
                 target_os = "cygwin",
                 target_os = "illumos",
                 target_os = "aix",
+                target_os = "haiku",
                 target_os = "android",
                 target_os = "redox",
                 target_vendor = "apple",
@@ -1396,6 +1393,7 @@ impl File {
                 target_os = "cygwin",
                 target_os = "illumos",
                 target_os = "aix",
+                target_os = "haiku",
                 target_os = "android",
                 target_os = "redox",
                 target_vendor = "apple",
@@ -1431,6 +1429,7 @@ impl File {
                 target_os = "cygwin",
                 target_os = "illumos",
                 target_os = "aix",
+                target_os = "haiku",
                 target_os = "android",
                 target_os = "redox",
                 target_vendor = "apple",
@@ -1868,6 +1867,59 @@ pub fn rename(old: &CStr, new: &CStr) -> io::Result<()> {
     cvt(unsafe { libc::rename(old.as_ptr(), new.as_ptr()) }).map(|_| ())
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn rename_noreplace(old: &CStr, new: &CStr) -> io::Result<()> {
+    syscall!(
+        fn renameat2(
+            olddirfd: c_int,
+            oldpath: *const libc::c_char,
+            newdirfd: c_int,
+            newpath: *const libc::c_char,
+            flags: libc::c_uint,
+        ) -> c_int;
+    );
+
+    // `RENAME_NOREPLACE` is `c_uint` on linux and `c_int` on Android, so casting is needed here.
+    let flags = libc::RENAME_NOREPLACE as libc::c_uint;
+    let res = cvt(unsafe {
+        renameat2(libc::AT_FDCWD, old.as_ptr(), libc::AT_FDCWD, new.as_ptr(), flags)
+    });
+
+    match res {
+        Ok(_) => Ok(()),
+        Err(err) => match err.raw_os_error() {
+            // The kernel predates `renameat2`.
+            Some(libc::ENOSYS) => link_then_unlink(old, new),
+            // The filesystem does not support `RENAME_NOREPLACE`.
+            // `EINVAL` also covers misuse, so report it unchanged unless the fallback found `new`.
+            Some(libc::EINVAL) => match link_then_unlink(old, new) {
+                Err(fallback) if fallback.raw_os_error() != Some(libc::EEXIST) => Err(err),
+                res => res,
+            },
+            _ => Err(err),
+        },
+    }
+}
+
+#[cfg(target_vendor = "apple")]
+pub fn rename_noreplace(old: &CStr, new: &CStr) -> io::Result<()> {
+    let res = cvt(unsafe { libc::renamex_np(old.as_ptr(), new.as_ptr(), libc::RENAME_EXCL) });
+    match res {
+        Ok(_) => Ok(()),
+        Err(err) => match err.raw_os_error() {
+            // The filesystem does not support `RENAME_EXCL`.
+            // Unlike Linux, Darwin keeps `EINVAL` for misuse only.
+            Some(libc::ENOTSUP) => link_then_unlink(old, new),
+            _ => Err(err),
+        },
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+pub fn rename_noreplace(old: &CStr, new: &CStr) -> io::Result<()> {
+    link_then_unlink(old, new)
+}
+
 pub fn set_perm(p: &CStr, perm: FilePermissions) -> io::Result<()> {
     cvt_r(|| unsafe { libc::chmod(p.as_ptr(), perm.mode) }).map(|_| ())
 }
@@ -1879,22 +1931,11 @@ pub fn set_perm_nofollow(_p: &CStr, _perm: FilePermissions) -> io::Result<()> {
     Err(crate::io::ErrorKind::Unsupported.into())
 }
 
-#[cfg(target_os = "android")]
-pub fn set_perm_nofollow(_p: &CStr, _perm: FilePermissions) -> io::Result<()> {
-    // Currently Android seems to be having inconsistent behavior with fchmodat
-    // with `AT_SYMLINK_NOFOLLOW` or openat with `O_NOFOLLOW` + fchmod.
-    // See this issue here mentioning inconsistent behavior on fchmodat:
-    // https://github.com/android/ndk/issues/1258
-    // On the arm-android CI job, using fchmodat with `AT_SYMLINK_NOFOLLOW` +
-    // fallback behavior on a symlink sets the target file's permissions,
-    // which is incorrect behavior.
-    Err(crate::io::ErrorKind::Unsupported.into())
-}
-
-#[cfg(not(any(target_os = "android", target_os = "vxworks")))]
+#[cfg(not(target_os = "vxworks"))]
 pub fn set_perm_nofollow(p: &CStr, perm: FilePermissions) -> io::Result<()> {
+    /// Helper function for fallback open with `O_NOFOLLOW` + `fchmod` behavior. This will
+    /// successfully change the permissions of non-symlinks and fail when there's a symlink.
     #[inline]
-    /// Helper function for fallback open with `O_NOFOLLOW` + `fchmod` behavior
     fn open_and_set_permissions(p: &CStr, perm: FilePermissions) -> io::Result<()> {
         use crate::fs::{OpenOptions, Permissions};
 
@@ -1909,6 +1950,7 @@ pub fn set_perm_nofollow(p: &CStr, perm: FilePermissions) -> io::Result<()> {
             use crate::os::unix::fs::OpenOptionsExt;
             #[cfg(target_os = "wasi")]
             use crate::os::wasi::fs::OpenOptionsExt;
+
             options.custom_flags(libc::O_NOFOLLOW);
         }
 
@@ -1923,7 +1965,8 @@ pub fn set_perm_nofollow(p: &CStr, perm: FilePermissions) -> io::Result<()> {
     #[allow(unused)]
     let mut res: Result<(), core::io::Error> = Err(crate::io::ErrorKind::Unsupported.into());
 
-    // These platforms support `fchmodat`, so utilize this syscall over `open` + `fchmod`
+    // These platforms support `fchmodat`, so utilize this syscall over `open` + `fchmod`.
+    // We can *not* use this on Android due to <https://github.com/android/ndk/issues/1258>.
     #[cfg(any(
         target_os = "linux",
         target_os = "macos",
@@ -2075,6 +2118,11 @@ pub fn canonicalize(path: &CStr) -> io::Result<PathBuf> {
         libc::free(r as *mut _);
         buf
     })))
+}
+
+fn link_then_unlink(old: &CStr, new: &CStr) -> io::Result<()> {
+    link(old, new)?;
+    unlink(old)
 }
 
 fn open_from(from: &Path) -> io::Result<(crate::fs::File, crate::fs::Metadata)> {

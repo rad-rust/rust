@@ -8,10 +8,10 @@ use rustc_errors::ErrorGuaranteed;
 use rustc_index::IndexVec;
 use rustc_index::bit_set::{BitMatrix, DenseBitSet};
 use rustc_macros::{StableHash, TyDecodable, TyEncodable, TypeFoldable, TypeVisitable};
-use rustc_span::def_id::LocalDefId;
+use rustc_span::def_id::{DefId, LocalDefId};
 use rustc_span::{Span, Symbol};
 
-use super::{ConstValue, Mutability, Place, SourceInfo, StatementId};
+use super::{ConstValue, Local, Mutability, Place, SourceInfo, StatementId};
 use crate::ty::{self, CoroutineArgsExt, Ty};
 
 rustc_index::newtype_index! {
@@ -131,7 +131,7 @@ pub enum ConstraintCategory<'tcx> {
     /// A constraint from a user-written predicate
     /// with the provided span, written on the item
     /// with the given `DefId`
-    Predicate(Span),
+    Predicate(Span, DefId),
 
     /// A "boring" constraint (caused by the given location) is one that
     /// the user probably doesn't want to see described in diagnostics,
@@ -244,6 +244,30 @@ pub enum Depth {
     Deep,
 }
 
+/// The memory outside the body that a pointer can hold, from the least to the most that a
+/// checkpoint must do about it
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, TyEncodable, TyDecodable, StableHash)]
+pub enum OutsideKind {
+    /// The lifetime is only in `PhantomData`, as in a peripheral token, so it points to nothing
+    Token,
+    /// Shared memory without interior mutability, which nothing can write
+    ReadOnly,
+    /// Shared memory with interior mutability. Tasks can't name such statics, so it comes from
+    /// strangelove
+    Kernel,
+    /// Exclusive memory, which only the task can write
+    Exclusive,
+    /// Memory behind a raw pointer, `dyn`, or a type the analysis can't see into
+    Unknown,
+}
+
+impl OutsideKind {
+    /// Whether a checkpoint must copy memory of this kind
+    pub fn copied(self) -> bool {
+        self >= OutsideKind::Exclusive
+    }
+}
+
 /// A list of loans for each body and the liveness during each statement
 #[derive(Debug, StableHash)]
 pub struct BodyLoans<'tcx> {
@@ -251,6 +275,17 @@ pub struct BodyLoans<'tcx> {
     pub loans: IndexVec<LoanId, Option<(Place<'tcx>, Mutability)>>,
     /// Instructions that need an alias analysis and the liveness info
     pub instructions: FxIndexMap<StatementId, InstructionLoans>,
+    /// For a `#[rad::checkpoint]` fn: what callers can assume its calls write
+    pub summary: Option<RadWriteSummary>,
+}
+
+/// The memory that a call to a `#[rad::checkpoint]` fn can write.
+#[derive(Clone, Debug, TyEncodable, TyDecodable, StableHash)]
+pub struct RadWriteSummary {
+    /// The lifetimes of the argument types that the callee can write through.
+    pub written: DenseBitSet<usize>,
+    /// The memory that the callee can also write, that none of its arguments lead to.
+    pub other: Option<OutsideKind>,
 }
 
 /// Instructions that are writes through a pointer, calls, drops or suspensions
@@ -260,6 +295,19 @@ pub struct InstructionLoans {
     pub live: DenseBitSet<LoanId>,
     /// Set of eligible loans that are still alive at the instruction
     pub reachable: Option<DenseBitSet<LoanId>>,
-    /// Whether those pointers can also hold memory not borrowed in this body
-    pub outside: bool,
+    /// The memory not borrowed in this body that those pointers can also hold
+    pub outside: Option<OutsideKind>,
+    /// Whether the instruction is a call that used the callee's [`RadWriteSummary`]
+    pub summary: bool,
+    /// The places in the future that can hold the copied outside memory, or `None` if a place
+    /// outside the future can also hold it
+    pub holders: Option<OutsideHolders>,
+}
+
+/// The places in the future whose types can hold a reference to some outside memory, kept here
+/// since lifetimes are erased by the time `RadWriteSets` runs.
+#[derive(Debug, Default, StableHash)]
+pub struct OutsideHolders {
+    pub locals: Vec<Local>,
+    pub upvars: Vec<FieldIdx>,
 }

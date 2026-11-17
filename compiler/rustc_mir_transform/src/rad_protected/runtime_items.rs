@@ -1,5 +1,5 @@
-use rustc_middle::ty::{Ty, TyCtxt};
 use rustc_hir::def_id::DefId;
+use rustc_middle::ty::{Ty, TyCtxt};
 use rustc_span::sym;
 
 pub(crate) struct RuntimeItems<'tcx> {

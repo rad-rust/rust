@@ -1,11 +1,12 @@
 use rustc_abi::FieldIdx;
 use rustc_middle::mir::{
-    Body, CheckpointObject, CoroutineLayout, Depth, Place, PlaceElem, StatementKind, BasicBlock,
+    BasicBlock, Body, CheckpointObject, CoroutineLayout, Depth, Place, PlaceElem, StatementKind,
 };
-use rustc_middle::ty::{self, Ty, TyCtxt, TypingEnv};
 use rustc_middle::ty::consts::ConstExt;
-use super::suspend_site::SuspendSite;
+use rustc_middle::ty::{self, Ty, TyCtxt, TypingEnv};
+
 use super::logger::Logger;
+use super::suspend_site::SuspendSite;
 
 pub(crate) struct Region<'tcx> {
     pub place: Place<'tcx>,
@@ -31,19 +32,27 @@ const MAX_DEPTH: u8 = 6;
 const SKIP_CHECKPOINT_MSG: &'static str = "the data it points to will not be checkpointed";
 
 impl<'tcx, 'a> Env<'tcx, 'a> {
-    pub(crate) fn new(tcx: TyCtxt<'tcx>, body: &'a Body<'tcx>, site: SuspendSite, objects: &'a [(CheckpointObject, Depth)]) -> Self {
+    pub(crate) fn new(
+        tcx: TyCtxt<'tcx>,
+        body: &'a Body<'tcx>,
+        site: SuspendSite,
+        objects: &'a [(CheckpointObject, Depth)],
+    ) -> Self {
         let typing_env = body.typing_env(tcx);
 
         Self { tcx, body, site, objects, typing_env, head_ty: None, regions: vec![] }
     }
-    
-    pub(crate) fn coroutine_place(body: &Body<'tcx>, block: BasicBlock) -> Result<Place<'tcx>, String> {
+
+    pub(crate) fn coroutine_place(
+        body: &Body<'tcx>,
+        block: BasicBlock,
+    ) -> Result<Place<'tcx>, String> {
         let Some(StatementKind::SetDiscriminant { place: this, .. }) =
             body[block].statements.last().map(|statement| &statement.kind)
         else {
             return Err("suspend block doesn't end with SetDiscriminant".into());
         };
-        
+
         Ok(**this)
     }
 
@@ -65,25 +74,30 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
         Ok(self.regions)
     }
 
-    fn collect_regions(&mut self, layout: &CoroutineLayout<'tcx>, this: Place<'tcx>, upvar_tys: &[Ty<'tcx>]) {
+    fn collect_regions(
+        &mut self,
+        layout: &CoroutineLayout<'tcx>,
+        this: Place<'tcx>,
+        upvar_tys: &[Ty<'tcx>],
+    ) {
         let objects = self.objects;
 
         for &(object, object_depth) in objects {
             let deep = object_depth == Depth::Deep;
 
             match object {
-                CheckpointObject::Discriminant => {},
+                CheckpointObject::Discriminant => {}
 
                 CheckpointObject::Saved(field, slot) => {
                     let ty = layout.field_tys[slot].ty;
                     self.head_ty = Some(ty);
-                    
+
                     let place = this.project_deeper(
                         &[PlaceElem::Downcast(None, self.site.state), PlaceElem::Field(field, ty)],
                         self.tcx,
                     );
                     self.regions(place, ty, deep, 0);
-                },
+                }
 
                 CheckpointObject::Upvar(field) => {
                     let fields: Vec<usize> = match field {
@@ -96,35 +110,51 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
                         self.head_ty = Some(ty);
                         self.field(this, field, ty, deep, 0);
                     }
-                },
-                
-                CheckpointObject::Outside => {},
+                }
+
+                CheckpointObject::Outside => {}
             }
         }
     }
 
     fn regions(&mut self, place: Place<'tcx>, ty: Ty<'tcx>, deep: bool, depth: u8) {
         let ty = self.norm(ty);
-        let size = 
-            match self.size_of(ty) {
-                Err(err) => {
-                    self.warn(ty, &err);
-                    return;
-                }
-                Ok(0) => { return; },
-                Ok(s) => s,
-            };
-            
-        match *ty.kind() {
+        let size = match self.size_of(ty) {
+            Err(err) => {
+                self.warn(ty, &err);
+                return;
+            }
+            Ok(0) => {
+                return;
+            }
+            Ok(s) => s,
+        };
 
+        match *ty.kind() {
             // Primitive datatypes, treat as opaque data
-            ty::Bool | ty::Char | ty::Int(_) | ty::Uint(_) | ty::Float(_) | ty::FnPtr(..) | ty::Pat(..) => {
+            ty::Bool
+            | ty::Char
+            | ty::Int(_)
+            | ty::Uint(_)
+            | ty::Float(_)
+            | ty::FnPtr(..)
+            | ty::Pat(..) => {
                 self.opaque(place, ty, size, true);
             }
 
             // Unsized, size of 0, or no layout: early exit above
-            ty::Str | ty::Slice(_) | ty::Dynamic(..) | ty::Foreign(_) | ty::Never | ty::FnDef(..) |
-            ty::Alias(..) | ty::Param(_) | ty::Bound(..) | ty::Placeholder(..) | ty::Infer(..) | ty::Error(_) => {
+            ty::Str
+            | ty::Slice(_)
+            | ty::Dynamic(..)
+            | ty::Foreign(_)
+            | ty::Never
+            | ty::FnDef(..)
+            | ty::Alias(..)
+            | ty::Param(_)
+            | ty::Bound(..)
+            | ty::Placeholder(..)
+            | ty::Infer(..)
+            | ty::Error(_) => {
                 unreachable!()
             }
 
@@ -154,22 +184,23 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
                 }
             }
 
-            ty::Array(elem, len) => {
-                match len.try_to_target_usize(self.tcx) {
-                    
-                    _ if self.is_primitive(elem) => self.opaque(place, ty, size, true),
-                    Some(count) if count <= MAX_UNROLL => {
-                        for offset in 0..count {
-                            let element = place.project_deeper(
-                                &[PlaceElem::ConstantIndex { offset, min_length: count, from_end: false }],
-                                self.tcx,
-                            );
-                            self.regions(element, elem, deep, depth);
-                        }
+            ty::Array(elem, len) => match len.try_to_target_usize(self.tcx) {
+                _ if self.is_primitive(elem) => self.opaque(place, ty, size, true),
+                Some(count) if count <= MAX_UNROLL => {
+                    for offset in 0..count {
+                        let element = place.project_deeper(
+                            &[PlaceElem::ConstantIndex {
+                                offset,
+                                min_length: count,
+                                from_end: false,
+                            }],
+                            self.tcx,
+                        );
+                        self.regions(element, elem, deep, depth);
                     }
-                    _ => self.opaque_maybe_ptr(place, ty, size),
                 }
-            }
+                _ => self.opaque_maybe_ptr(place, ty, size),
+            },
 
             ty::Ref(_, pointee, _) => {
                 self.opaque(place, ty, size, false);
@@ -179,7 +210,10 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
                 }
 
                 if depth >= MAX_DEPTH {
-                    self.warn(ty, &format!("exceeds {MAX_DEPTH} nested references: {SKIP_CHECKPOINT_MSG}"));
+                    self.warn(
+                        ty,
+                        &format!("exceeds {MAX_DEPTH} nested references: {SKIP_CHECKPOINT_MSG}"),
+                    );
                     return;
                 }
 
@@ -193,7 +227,11 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
             }
 
             // Opaque that might contain a ptr
-            ty::UnsafeBinder(_) | ty::Closure(..) | ty::CoroutineClosure(..) | ty::Coroutine(..) | ty::CoroutineWitness(..) => {
+            ty::UnsafeBinder(_)
+            | ty::Closure(..)
+            | ty::CoroutineClosure(..)
+            | ty::Coroutine(..)
+            | ty::CoroutineWitness(..) => {
                 self.opaque_maybe_ptr(place, ty, size);
             }
         }
@@ -225,7 +263,7 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
         let message = match self.head_ty {
             Some(head) if self.norm(head) != ty => {
                 format!("'{ty}' within '{head}' {message}")
-            },
+            }
             _ => format!("'{ty}' {message}"),
         };
 
@@ -239,7 +277,13 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
     fn is_primitive(&self, ty: Ty<'tcx>) -> bool {
         matches!(
             ty.kind(),
-            ty::Bool | ty::Char | ty::Int(_) | ty::Uint(_) | ty::Float(_) | ty::FnPtr(..) | ty::Pat(..)
+            ty::Bool
+                | ty::Char
+                | ty::Int(_)
+                | ty::Uint(_)
+                | ty::Float(_)
+                | ty::FnPtr(..)
+                | ty::Pat(..)
         )
     }
 
@@ -253,10 +297,7 @@ impl<'tcx, 'a> Env<'tcx, 'a> {
     }
 
     fn norm(&self, ty: Ty<'tcx>) -> Ty<'tcx> {
-        self.tcx.normalize_erasing_regions(
-            self.typing_env,
-            ty::Unnormalized::new(ty),
-        )
+        self.tcx.normalize_erasing_regions(self.typing_env, ty::Unnormalized::new(ty))
     }
 
     fn size_of(&self, ty: Ty<'tcx>) -> Result<u64, String> {

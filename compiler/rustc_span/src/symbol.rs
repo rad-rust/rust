@@ -219,7 +219,6 @@ symbols! {
         Equal,
         Err,
         ExitCode,
-        Expected,
         ExternC,
         ExternRust,
         Float,
@@ -233,10 +232,10 @@ symbols! {
         FnPtrToPtr,
         Formatter,
         Forward,
-        Found,
         From,
         FromIterator,
         FromResidual,
+        GenericTypeVisitable,
         GlobalAlloc,
         Hash,
         HashMap,
@@ -256,7 +255,6 @@ symbols! {
         IoBufReader,
         IrTyKind,
         Item,
-        ItemContext,
         Iterator,
         IteratorItem,
         IteratorMap,
@@ -332,7 +330,6 @@ symbols! {
         SliceIndex,
         Some,
         Source,
-        SpanCtxt,
         StdinLock,
         Str,
         String,
@@ -358,8 +355,8 @@ symbols! {
         TyCtxt,
         TyKind,
         Type,
+        TypeVisitable,
         Union,
-        Unresolved,
         Unsafe,
         UnsafeFnPointer,
         Unsize,
@@ -398,6 +395,7 @@ symbols! {
         abi_vectorcall,
         abi_x86_interrupt,
         abort,
+        abort_immediate,
         add,
         add_assign,
         add_with_overflow,
@@ -426,6 +424,7 @@ symbols! {
         altivec,
         alu32,
         always,
+        ambiguity,
         amdgpu,
         amdgpu_dispatch_ptr,
         analysis,
@@ -561,6 +560,7 @@ symbols! {
         bits,
         bitxor,
         bitxor_assign,
+        bivariant,
         black_box,
         block,
         blocking,
@@ -674,7 +674,6 @@ symbols! {
         cold_path,
         collapse_debuginfo,
         column,
-        common,
         compare_bytes,
         compare_exchange,
         compare_exchange_weak,
@@ -747,6 +746,7 @@ symbols! {
         contracts_ensures,
         contracts_internals,
         contracts_requires,
+        contravariant,
         convert,
         coprocessor,
         copy,
@@ -769,6 +769,7 @@ symbols! {
         coroutines,
         cos,
         count,
+        covariant,
         covariant_unsafe_cell,
         coverage,
         coverage_attribute,
@@ -1004,6 +1005,7 @@ symbols! {
         fields,
         file,
         final_associated_functions,
+        float_mul_add_relaxed,
         float_to_int_unchecked,
         floorf16,
         floorf32,
@@ -1047,6 +1049,7 @@ symbols! {
         format_macro,
         format_placeholder,
         format_unsafe_arg,
+        found,
         fp,
         fpregs,
         framework,
@@ -1070,6 +1073,7 @@ symbols! {
         fsub_algebraic,
         fsub_fast,
         full,
+        function_arg_const_generics,
         fundamental,
         fused_iterator,
         future_output,
@@ -1179,7 +1183,6 @@ symbols! {
         integer_max,
         integer_min,
         integral,
-        internal,
         internal_eq_trait_method_impls,
         internal_features,
         interrupt,
@@ -1189,6 +1192,7 @@ symbols! {
         into_try_type,
         intra_doc_pointers,
         intrinsics,
+        invariant,
         irrefutable_let_patterns,
         is,
         is_auto,
@@ -1201,6 +1205,7 @@ symbols! {
         issue_5723_bootstrap,
         issue_tracker_base_url,
         item,
+        item_context,
         item_like_imports,
         iter,
         iter_mut,
@@ -1405,6 +1410,8 @@ symbols! {
         more_qualified_paths,
         more_struct_aliases,
         movbe_target_feature,
+        movdir64b_target_feature,
+        movdiri_target_feature,
         move_expr,
         move_ref_pattern,
         move_size_limit,
@@ -1634,6 +1641,7 @@ symbols! {
         powif32,
         powif64,
         powif128,
+        ppcf128,
         pre_dash_lto: "pre-lto",
         precise_capturing,
         precise_capturing_in_traits,
@@ -1704,6 +1712,7 @@ symbols! {
         quad_precision_float,
         question_mark,
         quote,
+        rad,
         range_inclusive_new,
         raw_dash_dylib: "raw-dylib",
         raw_dylib,
@@ -1815,6 +1824,7 @@ symbols! {
         rustc_allowed_through_unstable_modules,
         rustc_always_gca,
         rustc_as_ptr,
+        rustc_assert_variance,
         rustc_attrs,
         rustc_autodiff,
         rustc_builtin_macro,
@@ -1900,6 +1910,9 @@ symbols! {
         rustc_peek_maybe_init,
         rustc_peek_maybe_uninit,
         rustc_preserve_ub_checks,
+        rustc_pretty_live_locals,
+        rustc_pretty_precise_liveness,
+        rustc_pretty_transitive_live_locals,
         rustc_private,
         rustc_proc_macro_decls,
         rustc_promotable,
@@ -1908,6 +1921,7 @@ symbols! {
         rustc_regions,
         rustc_scalable_vector,
         rustc_should_not_be_called_on_const_items,
+        rustc_show_spans,
         rustc_simd_monomorphize_lane_limit,
         rustc_skip_during_method_dispatch,
         rustc_specialization_trait,
@@ -2165,6 +2179,7 @@ symbols! {
         test_removed_feature,
         test_runner,
         test_unstable_lint,
+        this,
         thread,
         thread_local,
         threadptr,
@@ -2227,8 +2242,13 @@ symbols! {
         type_id_function_ptr,
         type_id_generics,
         type_id_is_signed,
+        type_id_non_exhaustive,
         type_id_points_mutably,
         type_id_points_to,
+        type_id_size_of,
+        type_id_type_of,
+        type_id_variant_name,
+        type_id_variant_non_exhaustive,
         type_id_variants,
         type_id_vtable,
         type_info,
@@ -2240,7 +2260,6 @@ symbols! {
         type_length_limit,
         type_macros,
         type_name,
-        type_of,
         type_privacy_lints,
         typed_swap_nonoverlapping,
         u8,
@@ -2309,6 +2328,7 @@ symbols! {
         unreachable_code,
         unreachable_display,
         unreachable_macro,
+        unresolved,
         unrestricted_attribute_tokens,
         unsafe_attributes,
         unsafe_binders,
@@ -2369,9 +2389,6 @@ symbols! {
         var,
         variadic,
         variant_count,
-        variant_name,
-        variant_non_exhaustive,
-        variants,
         vec,
         vector,
         verbatim,
@@ -2890,7 +2907,15 @@ impl Interner {
     // `ByteSymbol`.
     fn prefill(init: &[&'static str], extra: &[&'static str]) -> Self {
         let values = init.iter().copied().chain(extra.iter().copied()).map(|str| str.as_bytes());
-        let (size_hint, _) = values.size_hint();
+        // At the time of writing, `helloworld` Check benchmark interns ~1k additional symbols.
+        // Some of the noisy ones (`include-blob`, `tt-muncher`, `externs`, `large-workspace`, etc.)
+        // are between 1k and 2k. Lowest number among non-artificial benchmarks is ~5k for `ucd`.
+        // This was chosen to make small, artificial benchmarks more stable, and to
+        // reduce resizing for normal code without regresing memory use for smaller crates.
+        // FIXME(panstromek): we could do better if we take into account whether this is
+        //  Debug/Opt build. Those builds intern at least 6k more symbols than Check ones.
+        let additional_capacity = 2400;
+        let size_hint = values.size_hint().0 + additional_capacity;
         let mut conflicting_values: Vec<&[u8]> = Vec::new();
 
         let mut indices: HashTable<(&'static [u8], u32)> = HashTable::with_capacity(size_hint);
@@ -2989,9 +3014,19 @@ pub mod kw {
 ///
 /// Given that `sym` is imported, use them like `sym::symbol_name`.
 /// For example `sym::rustfmt` or `sym::u8`.
-#[diagnostic::on_unknown(
-    label = "`{Unresolved}` is not a pre-interned symbol",
-    note = "consider adding `{Unresolved}` to the `symbols!` invocation in compiler/rustc_span/src/symbol.rs"
+#[cfg_attr(
+    bootstrap,
+    diagnostic::on_unknown(
+        label = "`{Unresolved}` is not a pre-interned symbol",
+        note = "consider adding `{Unresolved}` to the `symbols!` invocation in compiler/rustc_span/src/symbol.rs"
+    )
+)]
+#[cfg_attr(
+    not(bootstrap),
+    diagnostic::on_unknown(
+        label = "`{unresolved}` is not a pre-interned symbol",
+        note = "consider adding `{unresolved}` to the `symbols!` invocation in compiler/rustc_span/src/symbol.rs"
+    )
 )]
 pub mod sym {
     use super::Symbol;

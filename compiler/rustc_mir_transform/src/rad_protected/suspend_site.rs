@@ -1,9 +1,6 @@
 use rustc_abi::VariantIdx;
-use rustc_middle::mir::{
-    Body, TerminatorKind, StatementKind, BasicBlock
-};
+use rustc_middle::mir::{BasicBlock, Body, StatementKind, TerminatorKind};
 use rustc_middle::ty::{CoroutineArgs, CoroutineArgsExt};
-
 
 /// Where the coroutine suspends: `StateTransform`'s `discriminant(self) = state; return`
 #[derive(Clone, Copy)]

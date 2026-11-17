@@ -2,8 +2,8 @@ use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
-use crate::hal;
 use crate::checkpoint::{self, Regions};
+use crate::hal;
 
 #[stable(feature = "rad_protected", since = "1.95.0")]
 pub struct Runtime;
@@ -26,7 +26,7 @@ impl Runtime {
     pub fn restore(site: u32, checkpoint: Regions<'_>, await_effects: Regions<'_>) {
         checkpoint::restore(site, checkpoint, await_effects);
     }
-    
+
     #[stable(feature = "rad_protected", since = "1.95.0")]
     pub fn sync() {
         checkpoint::sync();
@@ -34,7 +34,12 @@ impl Runtime {
 }
 
 #[stable(feature = "rad_protected", since = "1.95.0")]
-pub fn init_runtime(write: fn(&[u8]), core_num: fn()->u32, fifo_push_blocking: fn(u32), fifo_pop_blocking: fn()->u32) {
+pub fn init_runtime(
+    write: fn(&[u8]),
+    core_num: fn() -> u32,
+    fifo_push_blocking: fn(u32),
+    fifo_pop_blocking: fn() -> u32,
+) {
     hal::init_hal(write, core_num, fifo_push_blocking, fifo_pop_blocking);
 }
 
@@ -45,7 +50,7 @@ pub fn checkpoint() -> impl Future<Output = ()> {
 
 #[stable(feature = "rad_protected", since = "1.95.0")]
 struct Yield {
-    ready: u32
+    ready: u32,
 }
 
 impl Yield {

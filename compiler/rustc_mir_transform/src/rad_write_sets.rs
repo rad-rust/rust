@@ -1,4 +1,5 @@
 use either::Either;
+use rustc_abi::FieldIdx;
 use rustc_attr_ir::lang_items::LangItem;
 use rustc_data_structures::fx::{FxIndexMap, FxIndexSet};
 use rustc_hir as hir;
@@ -7,10 +8,11 @@ use rustc_index::bit_set::DenseBitSet;
 use rustc_middle::mir::visit::{MutatingUseContext, NonMutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
     AwaitCheckpoints, BasicBlock, Body, BodyLoans, CheckpointObject, CheckpointTable, Depth,
-    InstructionLoans, LoanId, Local, Location, Mutability, NonDivergingIntrinsic, Operand, Place,
-    ProjectionElem, Rvalue, START_BLOCK, Statement, StatementKind, Terminator, TerminatorKind,
-    StatementId,
+    InstructionLoans, LoanId, Local, Location, Mutability, NonDivergingIntrinsic, Operand,
+    OutsideKind, Place, ProjectionElem, Rvalue, START_BLOCK, Statement, StatementId, StatementKind,
+    Terminator, TerminatorKind,
 };
+use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{CAPTURE_STRUCT_LOCAL, TyCtxt, TypeVisitableExt};
 use rustc_mir_dataflow::impls::{
     MaybeBorrowedLocals, MaybeLiveLocals, MaybeRequiresStorage, always_storage_live_locals,
@@ -22,18 +24,26 @@ use crate::PassPolicy;
 use crate::coroutine::CTX_ARG;
 use crate::coroutine::layout::{LivenessInfo, locals_live_across_suspend_points};
 use crate::rad_statement_ids::{id_at, id_label, repeated_ids, unnumbered};
-use rustc_abi::FieldIdx;
 
 pub(super) struct RadWriteSets;
 
 impl<'tcx> crate::MirPass<'tcx> for RadWriteSets {
-    fn policy(&self, ctx: &crate::PassCtx<'_>) -> PassPolicy {
-        PassPolicy::optional(ctx.opts.unstable_opts.rad_write_sets)
+    fn policy(&self, _ctx: &crate::PassCtx<'_>) -> PassPolicy {
+        // Bodies without `#[rad::checkpoint]` are skipped in `run_pass`
+        PassPolicy::optional(true)
     }
 
     fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
-        if body.source.promoted.is_some() {
+        if body.source.promoted.is_some() || !tcx.rad_checkpointed(body.source.def_id()) {
             return;
+        }
+        let def_id = body.source.def_id();
+        if tracing::enabled!(tracing::Level::DEBUG)
+            && body.coroutine.is_none()
+            && !tcx.is_typeck_child(def_id)
+            && !tcx.asyncness(def_id).is_async()
+        {
+            with_no_trimmed_paths!(print_summary(tcx, body));
         }
         let Some(plan) = analyze(tcx, body) else { return };
         // Keep what to copy at each `.await` for the pass inserting the checkpoints
@@ -41,7 +51,7 @@ impl<'tcx> crate::MirPass<'tcx> for RadWriteSets {
         if let Some(coroutine) = body.coroutine.as_mut() {
             coroutine.rad_checkpoints = Some(table);
         }
-        // with_no_trimmed_paths!(print(tcx, body, &plan));
+        with_no_trimmed_paths!(print(tcx, body, &plan));
     }
 }
 
@@ -68,7 +78,7 @@ fn find_await(body: &Body<'_>, suspend: BasicBlock) -> Await {
     let TerminatorKind::Yield { resume, .. } = body[suspend].terminator().kind else {
         unrecognised("not a `Yield`")
     };
-    let TerminatorKind::Goto { target: head } = body[resume].terminator().kind else {
+    let TerminatorKind::Goto { target: head, .. } = body[resume].terminator().kind else {
         unrecognised("its resume block doesn't jump back to the loop head")
     };
 
@@ -231,19 +241,24 @@ impl CheckpointPlan<'_> {
             locs.iter().map(|&location| id_at(body, location)).collect()
         };
         let loop_head_id = |loop_head: BasicBlock| -> Option<StatementId> {
-            id_at(body, Location { block: loop_head, statement_index: body[loop_head].statements.len() })
+            id_at(
+                body,
+                Location { block: loop_head, statement_index: body[loop_head].statements.len() },
+            )
         };
 
         let awaits = self
             .awaits
             .iter()
-            .map(|plan| Some(AwaitCheckpoints {
+            .map(|plan| {
+                Some(AwaitCheckpoints {
                     before: list(&plan.before),
                     effects: list(&plan.effects),
                     loop_head: loop_head_id(plan.loop_head)?,
                     ends: locs_to_ids(&plan.ends)?,
-                }))
-                .collect::<Option<_>>()?;
+                })
+            })
+            .collect::<Option<_>>()?;
         Some(CheckpointTable { awaits })
     }
 }
@@ -374,7 +389,8 @@ impl<'tcx> Analysis<'_, 'tcx> {
                     .map(|statement_index| Location { block: bb, statement_index }),
             );
         }
-        let before = self.write_set(&code, saved_at(body, &self.liveness, index));
+        let no_pending = DenseBitSet::new_empty(body.local_decls.len());
+        let before = self.write_set(&code, saved_at(body, &self.liveness, index), &no_pending);
 
         // `effects`: the loop without its `Yield`, and the code after it until the awaitee is dead
         let mut code = Vec::new();
@@ -399,7 +415,7 @@ impl<'tcx> Analysis<'_, 'tcx> {
                 saved.remove(local);
             }
         }
-        let effects = self.write_set(&code, saved);
+        let effects = self.write_set(&code, saved, &pending);
 
         let predecessors = body.basic_blocks.predecessors();
 
@@ -407,15 +423,13 @@ impl<'tcx> Analysis<'_, 'tcx> {
             .iter()
             .copied()
             .filter(|&bb_idx| {
-                !awaited.blocks.contains(bb_idx) &&
-                    !body.basic_blocks[bb_idx].is_cleanup
+                !awaited.blocks.contains(bb_idx) && !body.basic_blocks[bb_idx].is_cleanup
             })
             .collect();
 
         // TODO: We currently only handle cases with a single loop head
         assert_eq!(loop_heads.len(), 1);
         let loop_head = loop_heads.pop().unwrap();
-
 
         AwaitPlan {
             suspend: awaited.suspend,
@@ -429,9 +443,14 @@ impl<'tcx> Analysis<'_, 'tcx> {
         }
     }
 
-    /// Finds what the checkpoint covering the instructions at `code` must copy, when `saved` are
-    /// the locals stored in the future where it is taken
-    fn write_set(&self, code: &[Location], saved: DenseBitSet<Local>) -> WriteSet<'tcx> {
+    /// Find what the checkpoint covering `code` must copy, given the locals `saved` in the future
+    /// there and the live ones still `pending`.
+    fn write_set(
+        &self,
+        code: &[Location],
+        saved: DenseBitSet<Local>,
+        pending: &DenseBitSet<Local>,
+    ) -> WriteSet<'tcx> {
         let body = self.body;
         // Find statements that modify objects
         let mut effects = Effects::default();
@@ -470,7 +489,7 @@ impl<'tcx> Analysis<'_, 'tcx> {
             }
             // Find where this Place actually aliases
             let reach = if writes_through_pointers(&effect) {
-                self.reach(location, &effect, &saved, &mut objects)
+                self.reach(location, &effect, &saved, pending, &mut objects)
             } else {
                 None
             };
@@ -481,9 +500,7 @@ impl<'tcx> Analysis<'_, 'tcx> {
 
     /// Helper to find the FieldIdx of a Local, see CoroutineSavedLocals::get
     fn saved_field(saved: &DenseBitSet<Local>, local: Local) -> FieldIdx {
-        FieldIdx::from_usize(
-            saved.iter().take_while(|&l| l < local).count()
-        )
+        FieldIdx::from_usize(saved.iter().take_while(|&l| l < local).count())
     }
 
     /// Find the saved local or upvar that holds `place` if it's stored in the future here
@@ -498,7 +515,7 @@ impl<'tcx> Analysis<'_, 'tcx> {
             };
             return Some(CheckpointObject::Upvar(field));
         }
-        
+
         let field = Self::saved_field(saved, place.local);
         let slot = self.liveness.saved_locals.get(place.local)?;
 
@@ -511,10 +528,19 @@ impl<'tcx> Analysis<'_, 'tcx> {
         location: Location,
         effect: &Effect<'tcx>,
         saved: &DenseBitSet<Local>,
+        pending: &DenseBitSet<Local>,
         objects: &mut FxIndexMap<CheckpointObject, Depth>,
     ) -> Option<Reach<'tcx>> {
-        // Without borrowck's results, the pointers can hold any saved local or memory
-        let Some(loans) = self.loans.filter(|_| !matches!(effect, Effect::Intrinsic)) else {
+        let span = self.body.source_info(location).span;
+        // Catches a raw pointer write that borrowck has no loans for. It means `LowerIntrinsics`
+        // or the inliner now runs before this pass, or `RadStatementIds` missed an `unsafe` block.
+        if let Effect::Intrinsic = effect {
+            span_bug!(span, "intrinsic write in a `#[rad::checkpoint]` body");
+        }
+        // Without borrowck's results, the pointers can hold any saved local or memory. That only
+        // happens without `-Zpolonius=next`, which `RadStatementIds` already reported.
+        let Some(loans) = self.loans else {
+            self.tcx.dcx().span_delayed_bug(span, "no borrowck results for a marked body");
             for local in saved.iter() {
                 if let Some(object) = self.object(local.into(), saved) {
                     record(objects, object, Depth::Shallow);
@@ -526,20 +552,51 @@ impl<'tcx> Analysis<'_, 'tcx> {
 
         let instruction = id_at(self.body, location).and_then(|id| loans.instructions.get(&id));
         let targets = targets(self.tcx, self.body, loans, instruction);
+        if targets.fallback {
+            span_bug!(span, "no borrowck result for an instruction of a marked body");
+        }
         // Pointer points to objects in the future, a shallow copy
         for &place in &targets.places {
             if let Some(object) = self.object(place, saved) {
                 record(objects, object, Depth::Shallow);
             }
         }
-        // Pointer points to memory outside the filter
-        if targets.outside {
-            match self.holders(location, effect, saved) {
-                Some(holders) => {
-                    for holder in holders {
-                        if let Some(object) = self.object(holder.into(), saved) {
-                            record(objects, object, Depth::Deep);
+        // Pointer points to memory outside the future that the trusted base doesn't restore
+        if targets.outside.is_some_and(OutsideKind::copied) {
+            let held = match self.holders(location, effect, saved) {
+                Some(holders) => Some(
+                    holders
+                        .into_iter()
+                        .filter_map(|holder| self.object(holder.into(), saved))
+                        .collect(),
+                ),
+                // Find the places in the future that can hold the memory, from the lifetimes a
+                // reference to it can be copied into
+                None => instruction
+                    // Skip a `Box`'s memory, since it doesn't come through a lifetime
+                    .filter(|instruction| instruction.outside == targets.outside)
+                    .and_then(|instruction| instruction.holders.as_ref())
+                    .and_then(|holders| {
+                        let mut held = Vec::new();
+                        for &local in &holders.locals {
+                            // Give up on a local that isn't in the future yet, since the
+                            // checkpoint can't follow it
+                            if pending.contains(local) {
+                                return None;
+                            }
+                            if saved.contains(local) {
+                                held.push(self.object(local.into(), saved)?);
+                            }
                         }
+                        let upvars = holders.upvars.iter();
+                        held.extend(upvars.map(|&field| CheckpointObject::Upvar(Some(field))));
+                        Some(held)
+                    }),
+            };
+            match held {
+                Some(held) => {
+                    for object in held {
+                        record(objects, object, Depth::Deep);
                     }
                 }
                 None => record(objects, CheckpointObject::Outside, Depth::Shallow),
@@ -563,11 +620,20 @@ impl<'tcx> Analysis<'_, 'tcx> {
             ) => Some(self.pointer_holder(place, saved)?.slot().into_iter().collect()),
             // A call can write through any reference among its arguments, or its destination's
             Effect::Call => {
-                let TerminatorKind::Call { args, destination, .. } =
+                let TerminatorKind::Call { func, args, destination, .. } =
                     &self.body[location.block].terminator().kind
                 else {
                     return None;
                 };
+                // The callee also writes memory that isn't from an argument
+                if let Some((callee, _)) = func.const_fn_def()
+                    && self
+                        .tcx
+                        .rad_write_summary(callee)
+                        .is_some_and(|summary| summary.other.is_some_and(OutsideKind::copied))
+                {
+                    return None;
+                }
                 let mut holders = Vec::new();
                 for arg in args {
                     // Only types with lifetimes hold references (regions are erased here)
@@ -827,7 +893,27 @@ fn on_cycle(body: &Body<'_>, block: BasicBlock) -> bool {
     false
 }
 
-#[allow(dead_code)]
+/// Prints the summary that calls of a `#[rad::checkpoint]` fn use
+fn print_summary<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
+    let def_id = body.source.def_id();
+    // Use `eprintln!` instead of `debug!` to avoid logspam
+    eprintln!("=== rad write summary: {} ===", tcx.def_path_str(def_id));
+    let Some(summary) = tcx.rad_write_summary(def_id) else {
+        eprintln!("  none (needs `-Zpolonius=next`)");
+        return;
+    };
+    let args: Vec<String> =
+        body.args_iter().map(|arg| format!("{arg:?}: {}", body.local_decls[arg].ty)).collect();
+    eprintln!("  args: {}", args.join(", "));
+    let written: Vec<String> = summary.written.iter().map(|k| k.to_string()).collect();
+    let other = summary.other.map_or_else(|| "no".to_string(), outside_label);
+    eprintln!(
+        "  writes through lifetimes {{{}}} of {}; other memory: {other}",
+        written.join(", "),
+        summary.written.domain_size()
+    );
+}
+
 fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, plan: &CheckpointPlan<'tcx>) {
     eprintln!("=== rad write sets: {} ===", tcx.def_path_str(body.source.def_id()));
     let source_map = tcx.sess.source_map();
@@ -918,7 +1004,7 @@ fn print_live_loans<'tcx>(
     saved: &DenseBitSet<Local>,
 ) {
     match reach.instruction {
-        Some(InstructionLoans { live, reachable: Some(reachable), outside }) => {
+        Some(InstructionLoans { live, reachable: Some(reachable), outside, summary, holders }) => {
             let reachable: Vec<String> = reachable
                 .iter()
                 .filter_map(|loan| {
@@ -926,12 +1012,25 @@ fn print_live_loans<'tcx>(
                     Some(format!("{loan:?} &{}{place:?}", mutability.prefix_str()))
                 })
                 .collect();
-            let outside = if *outside { " + outside" } else { "" };
+            let outside_text = outside
+                .map_or_else(String::new, |kind| format!(" + outside ({})", outside_label(kind)));
+            let summary = if *summary { ", callee summary" } else { "" };
             eprintln!(
-                "                 reaches: {{{}}}{outside} (of {} live)",
+                "                 reaches: {{{}}}{outside_text} (of {} live{summary})",
                 reachable.join(", "),
                 live.count()
             );
+            if outside.is_some_and(OutsideKind::copied) {
+                let holders = holders.as_ref().map_or_else(
+                    || "untracked".to_string(),
+                    |holders| {
+                        let locals = holders.locals.iter().map(|local| format!("{local:?}"));
+                        let upvars = holders.upvars.iter().map(|field| format!("upvar {field:?}"));
+                        format!("{{{}}}", locals.chain(upvars).collect::<Vec<_>>().join(", "))
+                    },
+                );
+                eprintln!("                 outside held by: {holders}");
+            }
         }
         _ => eprintln!("                 reaches: no borrowck result"),
     }
@@ -948,7 +1047,9 @@ fn print_targets(targets: &Targets<'_>, saved: &DenseBitSet<Local>) {
         .map(|place| format!("{place:?}"))
         .collect();
     let unsaved = targets.places.len() - kept.len();
-    let outside = if targets.outside { " + outside" } else { "" };
+    let outside = targets
+        .outside
+        .map_or_else(String::new, |kind| format!(" + outside ({})", outside_label(kind)));
     let fallback = if targets.fallback { " (fallback)" } else { "" };
     eprintln!(
         "                 targets: {{{}}}{outside}{fallback}, dropped {} unsaved, {} frozen",
@@ -958,12 +1059,24 @@ fn print_targets(targets: &Targets<'_>, saved: &DenseBitSet<Local>) {
     );
 }
 
+/// How the trace names a kind of outside memory
+fn outside_label(kind: OutsideKind) -> String {
+    let name = match kind {
+        OutsideKind::Token => "token",
+        OutsideKind::ReadOnly => "read-only",
+        OutsideKind::Kernel => "kernel",
+        OutsideKind::Exclusive => "exclusive",
+        OutsideKind::Unknown => "unknown",
+    };
+    if kind.copied() { name.to_string() } else { format!("{name}, not copied") }
+}
+
 /// The memory a set of loans can point to
 #[derive(Default)]
 struct Targets<'tcx> {
     places: FxIndexSet<Place<'tcx>>,
     /// Memory this body didn't borrow
-    outside: bool,
+    outside: Option<OutsideKind>,
     /// The instruction had no borrowck result, so every loan still live was used instead
     fallback: bool,
     /// Skip shared loans of `Freeze` data
@@ -988,7 +1101,7 @@ fn targets<'tcx>(
         // Without a result, the pointers can hold any loan still live here.
         Some(InstructionLoans { live, .. }) => {
             targets.fallback = true;
-            targets.outside = true;
+            targets.outside = Some(OutsideKind::Unknown);
             for loan in live.iter() {
                 targets.add(tcx, body, loans, loan);
             }
@@ -996,7 +1109,7 @@ fn targets<'tcx>(
         // If no result was found above, every loan in the body is marked
         None => {
             targets.fallback = true;
-            targets.outside = true;
+            targets.outside = Some(OutsideKind::Unknown);
             for loan in loans.loans.indices() {
                 targets.add(tcx, body, loans, loan);
             }
@@ -1022,7 +1135,7 @@ impl<'tcx> Targets<'tcx> {
             // Reborrow's loans are a superset of the original's
             Some((base, _)) if base.ty(body, tcx).ty.is_ref() => {}
             // Polonius can't resolve where a Box aliases
-            Some(_) => self.outside = true,
+            Some(_) => self.outside = self.outside.max(Some(OutsideKind::Unknown)),
         }
     }
 }

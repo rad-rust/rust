@@ -2,7 +2,6 @@
 
 // tidy-alphabetical-start
 #![allow(internal_features)]
-#![cfg_attr(bootstrap, feature(never_type))]
 #![feature(default_field_values)]
 #![feature(deref_patterns)]
 #![feature(file_buffered)]
@@ -107,7 +106,12 @@ impl<'tcx> TyCtxtConsts<'tcx> {
 }
 
 pub fn provide(providers: &mut Providers) {
-    *providers = Providers { mir_borrowck, mir_borrowck_implied_outlives_bounds, ..*providers };
+    *providers = Providers {
+        mir_borrowck,
+        mir_borrowck_implied_outlives_bounds,
+        rad_write_summary: polonius::rad_write_summary,
+        ..*providers
+    };
 }
 
 /// Provider for `query mir_borrowck`. Unlike `typeck`, this must
@@ -232,7 +236,7 @@ pub struct ClosureOutlivesRequirement<'tcx> {
 
 // Make sure this enum doesn't unintentionally grow
 #[cfg(target_pointer_width = "64")]
-rustc_data_structures::static_assert_size!(ConstraintCategory<'_>, 16);
+rustc_data_structures::static_assert_size!(ConstraintCategory<'_>, 24);
 
 /// The subject of a `ClosureOutlivesRequirement` -- that is, the thing
 /// that must outlive some region.
@@ -429,7 +433,7 @@ fn borrowck_check_region_constraints<'diag, 'tcx>(
         polonius_output,
         opt_closure_req,
         nll_errors,
-        polonius_context,
+        mut polonius_context,
     } = nll::compute_regions(
         root_cx,
         &infcx,
@@ -460,7 +464,7 @@ fn borrowck_check_region_constraints<'diag, 'tcx>(
         body,
         &regioncx,
         &borrow_set,
-        polonius_context.as_ref(),
+        polonius_context.as_mut(),
     ) {
         root_cx.record_loans(def, loans);
     }
@@ -988,7 +992,7 @@ impl<'a, 'tcx> ResultsVisitor<'tcx, Borrowck<'a, 'tcx>> for MirBorrowckCtxt<'a, 
                 }
             }
 
-            TerminatorKind::Goto { target: _ }
+            TerminatorKind::Goto { target: _, loop_hint_attrs: _ }
             | TerminatorKind::UnwindTerminate(_)
             | TerminatorKind::Unreachable
             | TerminatorKind::UnwindResume

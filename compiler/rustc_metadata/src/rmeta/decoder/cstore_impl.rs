@@ -274,6 +274,14 @@ provide! { tcx, def_id, other, cdata,
             .process_decoded(tcx, || panic!("{def_id:?} does not have coerce_unsized_info")))
     }
     mir_const_qualif => { table }
+    rad_write_summary => {
+        cdata
+            .root
+            .tables
+            .rad_write_summary
+            .get(cdata, def_id.index)
+            .map(|lazy| &*tcx.arena.alloc(lazy.decode((cdata, tcx))))
+    }
     rendered_const => { table }
     rendered_precise_capturing_args => { table }
     asyncness => { table_direct }

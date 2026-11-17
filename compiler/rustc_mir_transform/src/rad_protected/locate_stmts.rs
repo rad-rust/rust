@@ -1,8 +1,5 @@
-use rustc_middle::mir::{
-    CheckpointTable, AwaitCheckpoints, StatementId, Location
-};
-use rustc_middle::mir::Body;
 use rustc_data_structures::fx::FxHashMap;
+use rustc_middle::mir::{AwaitCheckpoints, Body, CheckpointTable, Location, StatementId};
 
 pub(crate) struct Locations(Vec<ResolvedLocations>);
 
@@ -13,7 +10,10 @@ pub(crate) struct ResolvedLocations {
 }
 
 impl Locations {
-    pub(crate) fn resolve<'tcx>(table: &CheckpointTable, body: &Body<'tcx>) -> Result<Self, String> {
+    pub(crate) fn resolve<'tcx>(
+        table: &CheckpointTable,
+        body: &Body<'tcx>,
+    ) -> Result<Self, String> {
         let mut ids: FxHashMap<_, _> = table
             .awaits
             .iter()
@@ -22,7 +22,7 @@ impl Locations {
             .collect();
 
         Self::check_for_duplicates(&ids, table)?;
-        
+
         let mut result = vec![ResolvedLocations::default(); table.awaits.len()];
 
         let mut add_location = |id, bb_idx, stmt_idx| {
@@ -34,10 +34,7 @@ impl Locations {
                 return;
             };
 
-            let location = Location {
-                block: bb_idx,
-                statement_index: stmt_idx,
-            };
+            let location = Location { block: bb_idx, statement_index: stmt_idx };
 
             if is_loop_head {
                 result[idx].loop_head = Some(location);
@@ -54,29 +51,31 @@ impl Locations {
         }
 
         if !ids.is_empty() {
-            return Err("Some StatementIds from the checkpoint table were not found in MIR".into())
+            return Err("Some StatementIds from the checkpoint table were not found in MIR".into());
         }
         Ok(Self(result))
     }
 
-    fn get_ids(idx: usize, checkpoints: &AwaitCheckpoints) -> impl Iterator<Item = (StatementId, (usize, bool))> + '_ {
+    fn get_ids(
+        idx: usize,
+        checkpoints: &AwaitCheckpoints,
+    ) -> impl Iterator<Item = (StatementId, (usize, bool))> + '_ {
         let loop_head = std::iter::once((checkpoints.loop_head, (idx, true)));
 
-        checkpoints
-            .ends
-            .iter()
-            .map(move |&e| (e, (idx, false)))
-            .chain(loop_head)
+        checkpoints.ends.iter().map(move |&e| (e, (idx, false))).chain(loop_head)
     }
 
-    fn check_for_duplicates(ids: &FxHashMap<StatementId, (usize, bool)>, table: &CheckpointTable) -> Result<(), String> {
+    fn check_for_duplicates(
+        ids: &FxHashMap<StatementId, (usize, bool)>,
+        table: &CheckpointTable,
+    ) -> Result<(), String> {
         let expected: usize = table.awaits.iter().map(|a| a.ends.len() + 1).sum();
         if ids.len() != expected {
             return Err("Duplicate StatementIds found in checkpoint table".into());
         }
         Ok(())
     }
-    
+
     pub(crate) fn get(&self, idx: usize) -> &ResolvedLocations {
         &self.0[idx]
     }

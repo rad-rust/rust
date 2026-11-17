@@ -50,7 +50,7 @@ use rustc_mir_dataflow::points::{DenseLocationMap, PointIndex};
 
 pub(self) use self::constraints::*;
 pub(crate) use self::dump::dump_polonius_mir;
-pub(crate) use self::instruction_loans::instruction_loans;
+pub(crate) use self::instruction_loans::{instruction_loans, rad_write_summary};
 pub(crate) use self::liveness_constraints::record_live_region_variance;
 use crate::constraints::OutlivesConstraint;
 use crate::dataflow::BorrowIndex;
