@@ -202,6 +202,8 @@ rustc_index::newtype_index! {
 /// The write set of the two checkpoints at each `.await` of a coroutine.
 #[derive(Clone, Debug, TyEncodable, TyDecodable, StableHash)]
 pub struct CheckpointTable {
+    /// Initial checkpoint at the function entry, i.e. the arguments
+    pub entry: Vec<(CheckpointObject, Depth)>,
     /// Sorts each interval based on the boundaries of the interval. The `.await`s are in
     /// block order of their `Yield`s, which is also the order of `StateTransform`'s suspend states
     /// (state `3 + index`)
@@ -288,8 +290,10 @@ pub struct BodyLoans<'tcx> {
     pub loans: IndexVec<LoanId, Option<(Place<'tcx>, Mutability)>>,
     /// Instructions that need an alias analysis and the liveness info
     pub instructions: FxIndexMap<StatementId, InstructionLoans>,
-    /// For a `#[rad::checkpoint]` fn: what callers can assume its calls write
+    /// What callers can assume a `#[rad::checkpoint]` fn writes
     pub summary: Option<RadWriteSummary>,
+    /// The upvars written to by an async body, in field order
+    pub written_upvars: Option<Vec<FieldIdx>>,
 }
 
 /// The memory that a call to a `#[rad::checkpoint]` fn can write.

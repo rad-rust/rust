@@ -250,6 +250,8 @@ pub(crate) fn instruction_loans<'tcx>(
     let def = body.source.def_id();
     let summary = (body.coroutine.is_none() && !tcx.is_typeck_child(def))
         .then(|| write_summary(tcx, body, regioncx, &site_loans, &graph));
+    // The entry checkpoint of an async body copies the memory behind these upvars
+    let written_upvars = body.coroutine.is_some().then(|| graph.written_upvars(&site_loans));
 
     // Move each site's loans into its instruction's `InstructionLoans`
     let mut instructions = FxIndexMap::default();
@@ -314,7 +316,7 @@ pub(crate) fn instruction_loans<'tcx>(
         instructions.insert(site.id, instruction);
     }
 
-    Some(BodyLoans { loans, instructions, summary })
+    Some(BodyLoans { loans, instructions, summary, written_upvars })
 }
 
 /// Generates the write summary of this body, which lists the lifetimes of its arguments that it writes through.
@@ -350,9 +352,7 @@ fn write_summary<'tcx>(
         }
     }
 
-    // Find every lifetime whose references can flow into a written one
-    let used = site_loans.sites.values().flat_map(|site| site.used.iter().flatten());
-    let written = RegionGraph::walk(&graph.from, used.map(|used| used.region), None, None);
+    let written = graph.written(site_loans);
 
     // Match these regions to the original arguments
     let mut written_params = DenseBitSet::new_empty(params.len());
@@ -564,6 +564,22 @@ impl RegionGraph {
             }
         }
         seen
+    }
+
+    /// Find every lifetime whose references can flow into one that a site writes through.
+    fn written(&self, site_loans: &SiteLoans) -> DenseBitSet<RegionVid> {
+        let used = site_loans.sites.values().flat_map(|site| site.used.iter().flatten());
+        Self::walk(&self.from, used.map(|used| used.region), None, None)
+    }
+
+    /// Find the upvars whose types hold a lifetime that the body writes through.
+    fn written_upvars(&self, site_loans: &SiteLoans) -> Vec<FieldIdx> {
+        let written = self.written(site_loans);
+        let mut upvars: Vec<FieldIdx> =
+            written.iter().flat_map(|region| self.upvars[region].iter().copied()).collect();
+        upvars.sort_unstable();
+        upvars.dedup();
+        upvars
     }
 
     /// Find the lifetimes whose references can flow into `region`, without going past `stop`.

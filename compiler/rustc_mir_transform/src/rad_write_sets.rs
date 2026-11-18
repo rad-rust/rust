@@ -13,7 +13,7 @@ use rustc_middle::mir::{
     StatementKind, Terminator, TerminatorKind,
 };
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::{CAPTURE_STRUCT_LOCAL, TyCtxt, TypeVisitableExt};
+use rustc_middle::ty::{self, CAPTURE_STRUCT_LOCAL, TyCtxt, TypeVisitableExt};
 use rustc_mir_dataflow::impls::{
     MaybeBorrowedLocals, MaybeLiveLocals, MaybeRequiresStorage, always_storage_live_locals,
 };
@@ -196,6 +196,8 @@ fn live_after_ends<'tcx>(
 struct CheckpointPlan<'tcx> {
     /// Polonius's results for the body
     loans: Option<&'tcx BodyLoans<'tcx>>,
+    /// Number of upvars, which are the arguments of the async fn
+    upvars: usize,
     awaits: Vec<AwaitPlan<'tcx>>,
 }
 
@@ -235,6 +237,20 @@ struct WriteSet<'tcx> {
 }
 
 impl CheckpointPlan<'_> {
+    /// The function entry checkpoint copies every argument
+    fn entry(&self) -> Vec<(CheckpointObject, Depth)> {
+        let written = self.loans.and_then(|loans| loans.written_upvars.as_ref());
+        (0..self.upvars)
+            .map(FieldIdx::from_usize)
+            .map(|field| {
+                // Without borrowck's results, the task can write through any argument
+                let deep = written.is_none_or(|written| written.contains(&field));
+                let depth = if deep { Depth::Deep } else { Depth::Shallow };
+                (CheckpointObject::Upvar(Some(field)), depth)
+            })
+            .collect()
+    }
+
     /// What to copy at each `.await`, without the details of how it was found
     fn table(&self, body: &Body<'_>) -> Option<CheckpointTable> {
         let list = |write_set: &WriteSet<'_>| -> Vec<_> {
@@ -263,7 +279,7 @@ impl CheckpointPlan<'_> {
                 intervals.insert((interval.from, IntervalBoundary::Await(to)), checkpoints);
             }
         }
-        Some(CheckpointTable { intervals })
+        Some(CheckpointTable { entry: self.entry(), intervals })
     }
 }
 
@@ -303,6 +319,11 @@ fn analyze<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) -> Option<CheckpointPlan<
         return None;
     }
 
+    let ty::Coroutine(_, args) = *body.local_decls[CAPTURE_STRUCT_LOCAL].ty.kind() else {
+        span_bug!(body.span, "a body with `.await`s isn't a coroutine")
+    };
+    let upvars = args.as_coroutine().upvar_tys().len();
+
     let movable = tcx.coroutine_movability(body.source.def_id()) == hir::Movability::Movable;
     let liveness =
         locals_live_across_suspend_points(tcx, body, &always_storage_live_locals(body), movable);
@@ -332,7 +353,7 @@ fn analyze<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) -> Option<CheckpointPlan<
         .enumerate()
         .map(|(index, (awaited, live))| analysis.await_plan(index, awaited, live))
         .collect();
-    Some(CheckpointPlan { loans, awaits })
+    Some(CheckpointPlan { loans, upvars, awaits })
 }
 
 /// What `analyze` computes once per body, for every checkpoint to use
@@ -971,6 +992,7 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, plan: &CheckpointPlan<'tcx>
     let locals = |set: &DenseBitSet<Local>| -> String {
         set.iter().map(|local| format!("{local:?}")).collect::<Vec<_>>().join(", ")
     };
+    eprintln!("  entry: {:?}", plan.entry());
     for (index, awaited) in plan.awaits.iter().enumerate() {
         let suspend = awaited.suspend;
         let span =
