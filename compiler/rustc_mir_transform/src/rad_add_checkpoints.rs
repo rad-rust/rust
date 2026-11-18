@@ -73,7 +73,14 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
         // Make sure that the sites match the actual number of checkpoints
         assert_eq!(sites.len(), groups.len(), "suspensions don't match the plan");
 
-        let mut restore = generate_starting_restore_site(body);
+        let mut restore = match emit_entry(tcx, body, &runtime, &table.entry) {
+            Ok(s) => s,
+            Err(err_msg) => {
+                Logger::error(&format!("entry skipped: {err_msg}"));
+                Logger::report(tcx);
+                return;
+            }
+        };
 
         for (index, (site, group)) in sites.into_iter().zip(&groups).enumerate() {
             assert_eq!(site.state.as_usize(), CoroutineArgs::RESERVED_VARIANTS + index);
@@ -92,6 +99,21 @@ impl<'tcx> crate::MirPass<'tcx> for RadAddCheckpoints {
 
         Logger::report(tcx);
     }
+}
+
+/// Emit a checkpoint when the function starts.
+fn emit_entry<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &mut Body<'tcx>,
+    runtime: &RuntimeItems<'tcx>,
+    objects: &[(CheckpointObject, Depth)],
+) -> Result<RestoreSite<'tcx>, String> {
+    let (site, this, restore) = generate_starting_restore_site(body)?;
+    if !objects.is_empty() {
+        let checkpoint = emit_checkpoint(tcx, body, site, this, &runtime.await_effects, objects)?;
+        validate_payload_size(runtime.buffer_size, checkpoint.total_bytes)?;
+    }
+    Ok(restore)
 }
 
 fn emit_await<'tcx>(
