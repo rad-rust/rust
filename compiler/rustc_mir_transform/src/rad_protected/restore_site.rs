@@ -4,20 +4,21 @@ use rustc_middle::mir::{
     Terminator, TerminatorKind,
 };
 use rustc_middle::ty::{CoroutineArgs, CoroutineArgsExt};
+use rustc_span::span_bug;
 
 use crate::rad_protected::regions::Region;
 use crate::rad_protected::suspend_site::SuspendSite;
 
 pub(crate) struct RestoreSite<'tcx> {
     pub block: BasicBlock,
-    pub regions: Option<(Vec<Region<'tcx>>, Local)>,
+    pub regions: (Vec<Region<'tcx>>, Local),
 }
 
-/// Puts an empty block for the entry checkpoint in front of the body start and returns that block,
-/// the coroutine, and the body start
+/// Puts an empty block for the entry checkpoint in front of the body start and returns that block
+/// and the coroutine
 pub(crate) fn generate_starting_restore_site<'tcx>(
     body: &mut Body<'tcx>,
-) -> Result<(SuspendSite, Place<'tcx>, RestoreSite<'tcx>), String> {
+) -> (SuspendSite, Place<'tcx>) {
     // `StateTransform` starts the body with a switch on the state, whose `UNRESUMED` arm is the
     // original first block
     let start = &body.basic_blocks[START_BLOCK];
@@ -31,16 +32,15 @@ pub(crate) fn generate_starting_restore_site<'tcx>(
             },
             _ => None,
         })
-        .ok_or("the first block doesn't read the state")?;
+        .unwrap_or_else(|| span_bug!(body.span, "the first block doesn't read the state"));
     let TerminatorKind::SwitchInt { targets, .. } = &start.terminator().kind else {
-        return Err("the first block doesn't switch on the state".into());
+        span_bug!(body.span, "the first block doesn't switch on the state");
     };
     let unresumed = CoroutineArgs::UNRESUMED as u128;
-    let arm = targets
-        .all_values()
-        .iter()
-        .position(|&value| value.get() == unresumed)
-        .ok_or("the switch on the state has no `UNRESUMED` arm")?;
+    let arm =
+        targets.all_values().iter().position(|&value| value.get() == unresumed).unwrap_or_else(
+            || span_bug!(body.span, "the switch on the state has no `UNRESUMED` arm"),
+        );
     let body_start = targets.all_targets()[arm];
 
     // Insert empty entry block
@@ -58,6 +58,5 @@ pub(crate) fn generate_starting_restore_site<'tcx>(
 
     let site =
         SuspendSite { block: entry, state: VariantIdx::from_usize(CoroutineArgs::UNRESUMED) };
-    // A rollback goes to the block after the entry checkpoint
-    Ok((site, this, RestoreSite { block: body_start, regions: None }))
+    (site, this)
 }
