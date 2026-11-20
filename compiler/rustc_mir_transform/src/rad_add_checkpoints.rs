@@ -109,6 +109,10 @@ fn emit_entry<'tcx>(
     objects: &[(CheckpointObject, Depth)],
 ) -> Result<RestoreSite<'tcx>, String> {
     let (site, this) = generate_starting_restore_site(body);
+    if objects.is_empty() {
+        // A rollback to the function entry has nothing to restore when the function has no args
+        return Ok(RestoreSite { block: site.block, regions: None });
+    }
     emit_restore_site(tcx, body, site, this, runtime, objects, None)
 }
 
@@ -182,7 +186,7 @@ fn emit_restore_site<'tcx>(
     validate_payload_size(runtime.buffer_size, checkpoint.total_bytes)?;
     // Without a compare checkpoint, restore the regions that this checkpoint copies
     let c_regions = c_regions.unwrap_or(checkpoint.c_regions);
-    Ok(RestoreSite { block: checkpoint.target, regions: (c_regions, checkpoint.ae_regions) })
+    Ok(RestoreSite { block: checkpoint.target, regions: Some((c_regions, checkpoint.ae_regions)) })
 }
 
 fn split_at<'tcx>(_tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, location: &Location) {
@@ -422,41 +426,42 @@ fn emit_rollback<'tcx>(
     // TODO: `restore_site` is the one before this `.await` in program order, so after a loop back
     // edge or a skipped branch `ae_regions` is a stack local from an earlier poll or was never
     // written; fix it with the switch on the restore site in `previous_variant`
-    let (c_regions, ae_regions) = restore_site.regions;
-    let (slice_ref, stmts) = build_regions(tcx, body, &c_regions);
+    if let Some((c_regions, ae_regions)) = restore_site.regions {
+        let (slice_ref, stmts) = build_regions(tcx, body, &c_regions);
 
-    let dest = body.local_decls.push(LocalDecl::new(tcx.types.unit, span));
-    let site_arg = Operand::const_from_scalar(
-        tcx,
-        tcx.types.u32,
-        Scalar::from_u32(variant_index.as_u32()),
-        span,
-    );
+        let dest = body.local_decls.push(LocalDecl::new(tcx.types.unit, span));
+        let site_arg = Operand::const_from_scalar(
+            tcx,
+            tcx.types.u32,
+            Scalar::from_u32(variant_index.as_u32()),
+            span,
+        );
 
-    let args: Box<[Spanned<Operand<'tcx>>]> = Box::new([
-        Spanned { node: site_arg, span },
-        Spanned { node: Operand::Move(slice_ref.into()), span },
-        Spanned { node: Operand::Move(ae_regions.into()), span },
-    ]);
+        let args: Box<[Spanned<Operand<'tcx>>]> = Box::new([
+            Spanned { node: site_arg, span },
+            Spanned { node: Operand::Move(slice_ref.into()), span },
+            Spanned { node: Operand::Move(ae_regions.into()), span },
+        ]);
 
-    let blocks = body.basic_blocks_mut();
-    rollback = blocks.push(BasicBlockData::new_stmts(
-        stmts,
-        Some(Terminator {
-            source_info,
-            kind: TerminatorKind::Call {
-                func: Operand::function_handle(tcx, restore, &[], span),
-                args,
-                destination: dest.into(),
-                target: Some(rollback),
-                unwind: UnwindAction::Continue,
-                call_source: CallSource::Misc,
-                fn_span: span,
-            },
-            id: None,
-        }),
-        false,
-    ));
+        let blocks = body.basic_blocks_mut();
+        rollback = blocks.push(BasicBlockData::new_stmts(
+            stmts,
+            Some(Terminator {
+                source_info,
+                kind: TerminatorKind::Call {
+                    func: Operand::function_handle(tcx, restore, &[], span),
+                    args,
+                    destination: dest.into(),
+                    target: Some(rollback),
+                    unwind: UnwindAction::Continue,
+                    call_source: CallSource::Misc,
+                    fn_span: span,
+                },
+                id: None,
+            }),
+            false,
+        ));
+    }
 
     let blocks = body.basic_blocks_mut();
     let old_return = blocks[site.block].terminator.take().unwrap();

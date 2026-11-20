@@ -11,7 +11,7 @@ use crate::rad_protected::suspend_site::SuspendSite;
 
 pub(crate) struct RestoreSite<'tcx> {
     pub block: BasicBlock,
-    pub regions: (Vec<Region<'tcx>>, Local),
+    pub regions: Option<(Vec<Region<'tcx>>, Local)>,
 }
 
 /// Puts an empty block for the entry checkpoint in front of the body start and returns that block
