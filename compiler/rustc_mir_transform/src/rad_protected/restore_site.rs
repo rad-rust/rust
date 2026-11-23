@@ -1,18 +1,12 @@
 use rustc_abi::VariantIdx;
 use rustc_middle::mir::{
-    BasicBlock, BasicBlockData, Body, Local, Place, Rvalue, START_BLOCK, SourceInfo, StatementKind,
-    Terminator, TerminatorKind,
+    BasicBlockData, Body, Place, Rvalue, START_BLOCK, SourceInfo, StatementKind, Terminator,
+    TerminatorKind,
 };
 use rustc_middle::ty::{CoroutineArgs, CoroutineArgsExt};
 use rustc_span::span_bug;
 
-use crate::rad_protected::regions::Region;
 use crate::rad_protected::suspend_site::SuspendSite;
-
-pub(crate) struct RestoreSite<'tcx> {
-    pub block: BasicBlock,
-    pub regions: Option<(Vec<Region<'tcx>>, Local)>,
-}
 
 /// Puts an empty block for the entry checkpoint in front of the body start and returns that block
 /// and the coroutine

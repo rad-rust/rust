@@ -204,10 +204,8 @@ rustc_index::newtype_index! {
 pub struct CheckpointTable {
     /// Initial checkpoint at the function entry, i.e. the arguments
     pub entry: Vec<(CheckpointObject, Depth)>,
-    /// Sorts each interval based on the boundaries of the interval. The `.await`s are in
-    /// block order of their `Yield`s, which is also the order of `StateTransform`'s suspend states
-    /// (state `3 + index`)
-    pub intervals: FxIndexMap<(IntervalBoundary, IntervalBoundary), AwaitCheckpoints>,
+    /// Map the data to be checkpointed to the interval endpoints
+    pub intervals: FxIndexMap<(IntervalStart, IntervalEnd), AwaitCheckpoints>,
 }
 
 /// The two checkpoints needed for each interval.
@@ -223,16 +221,34 @@ pub struct AwaitCheckpoints {
     pub ends: Vec<StatementId>,
 }
 
-/// Where an interval of code between checkpoints starts or ends
+/// Where an interval of code between checkpoints starts
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, TyEncodable, TyDecodable, StableHash)]
-pub enum IntervalBoundary {
-    /// The function entry, which only starts an interval
+pub enum IntervalStart {
+    /// The function entry
     Entry,
-    /// The `.await` with this index: an interval starts at its awaitee's `StorageDead` and ends at
-    /// its loop head
+    /// The end of the `.await` with this index, at its awaitee's `StorageDead`
     Await(usize),
-    /// The function return, which only ends an interval
+}
+
+/// Where an interval of code between checkpoints ends
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, TyEncodable, TyDecodable, StableHash)]
+pub enum IntervalEnd {
+    /// The loop head of the `.await` with this index
+    Await(usize),
+    /// The function return
     Return,
+}
+
+impl IntervalStart {
+    /// The coroutine state that the restore site of this start writes
+    pub fn state(self) -> VariantIdx {
+        match self {
+            IntervalStart::Entry => VariantIdx::from_usize(ty::CoroutineArgs::UNRESUMED),
+            IntervalStart::Await(index) => {
+                VariantIdx::from_usize(ty::CoroutineArgs::RESERVED_VARIANTS + index)
+            }
+        }
+    }
 }
 
 TrivialTypeTraversalImpls! { CheckpointTable }

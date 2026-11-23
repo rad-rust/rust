@@ -544,6 +544,7 @@ symbols! {
         await_macro,
         backchain,
         backend_repr,
+        bad_state,
         begin_panic,
         bench,
         bevy_ecs,
