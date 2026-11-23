@@ -23,8 +23,14 @@ impl Runtime {
 
     #[stable(feature = "rad_protected", since = "1.95.0")]
     #[rustc_diagnostic_item = "restore"]
-    pub fn restore(site: u32, checkpoint: Regions<'_>, await_effects: Regions<'_>) {
-        checkpoint::restore(site, checkpoint, await_effects);
+    pub fn restore(site: u32, future: *mut u8, size: usize) {
+        checkpoint::restore(site, future, size);
+    }
+
+    #[stable(feature = "rad_protected", since = "1.95.0")]
+    #[rustc_diagnostic_item = "bad_state"]
+    pub fn bad_state(site: u32) -> ! {
+        panic!("no restore site matches the coroutine state at checkpoint site {site}");
     }
 
     #[stable(feature = "rad_protected", since = "1.95.0")]

@@ -8,9 +8,9 @@ use rustc_index::bit_set::DenseBitSet;
 use rustc_middle::mir::visit::{MutatingUseContext, NonMutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
     AwaitCheckpoints, BasicBlock, Body, BodyLoans, CheckpointObject, CheckpointTable, Depth,
-    InstructionLoans, IntervalBoundary, LoanId, Local, Location, Mutability, NonDivergingIntrinsic,
-    Operand, OutsideKind, Place, ProjectionElem, Rvalue, START_BLOCK, Statement, StatementId,
-    StatementKind, Terminator, TerminatorKind,
+    InstructionLoans, IntervalEnd, IntervalStart, LoanId, Local, Location, Mutability,
+    NonDivergingIntrinsic, Operand, OutsideKind, Place, ProjectionElem, Rvalue, START_BLOCK,
+    Statement, StatementId, StatementKind, Terminator, TerminatorKind,
 };
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{self, CAPTURE_STRUCT_LOCAL, TyCtxt, TypeVisitableExt};
@@ -220,7 +220,7 @@ struct AwaitPlan<'tcx> {
 
 /// The code from one start to an `.await`, and its write set
 struct IntervalPlan<'tcx> {
-    from: IntervalBoundary,
+    from: IntervalStart,
     write_set: WriteSet<'tcx>,
 }
 
@@ -276,7 +276,7 @@ impl CheckpointPlan<'_> {
                     loop_head: loop_head_id(plan.loop_head)?,
                     ends: locs_to_ids(&plan.ends)?,
                 };
-                intervals.insert((interval.from, IntervalBoundary::Await(to)), checkpoints);
+                intervals.insert((interval.from, IntervalEnd::Await(to)), checkpoints);
             }
         }
         Some(CheckpointTable { entry: self.entry(), intervals })
@@ -413,22 +413,19 @@ impl<'tcx> Analysis<'_, 'tcx> {
         // Do a forward walk from each starting `await` and generate unique write sets for each one.
         let no_pending = DenseBitSet::new_empty(body.local_decls.len());
         let origins = from_entry
-            .then_some(IntervalBoundary::Entry)
+            .then_some(IntervalStart::Entry)
             .into_iter()
-            .chain(after.into_iter().map(IntervalBoundary::Await));
+            .chain(after.into_iter().map(IntervalStart::Await));
         let intervals = origins
             .map(|from| {
                 let mut stack: Vec<BasicBlock> = match from {
-                    IntervalBoundary::Entry => vec![START_BLOCK],
-                    IntervalBoundary::Await(earlier) => self
+                    IntervalStart::Entry => vec![START_BLOCK],
+                    IntervalStart::Await(earlier) => self
                         .end_of
                         .iter()
                         .filter(|&(bb, &(index, _))| index == earlier && first_of.contains_key(bb))
                         .map(|(&bb, _)| bb)
                         .collect(),
-                    IntervalBoundary::Return => {
-                        span_bug!(body.span, "an interval starts at the function return")
-                    }
                 };
                 let mut seen = DenseBitSet::new_empty(body.basic_blocks.len());
                 let mut code = Vec::new();
@@ -1001,9 +998,8 @@ fn print<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>, plan: &CheckpointPlan<'tcx>
 
         for interval in &awaited.intervals {
             let start = match interval.from {
-                IntervalBoundary::Entry => "entry".to_string(),
-                IntervalBoundary::Await(earlier) => format!("end of .await {earlier}"),
-                IntervalBoundary::Return => "return".to_string(),
+                IntervalStart::Entry => "entry".to_string(),
+                IntervalStart::Await(earlier) => format!("end of .await {earlier}"),
             };
             eprintln!("    before, since {start}:");
             print_write_set(tcx, body, plan.loans, &interval.write_set);

@@ -96,7 +96,7 @@ pub(crate) fn snapshot(_site: u32, _regions: Regions<'_>) {
     // TODO: snapshot regions
 }
 
-pub(crate) fn restore(_site: u32, _checkpoint: Regions<'_>, _await_effects: Regions<'_>) {
+pub(crate) fn restore(_site: u32, _future: *mut u8, _size: usize) {
     // TODO: restore regions
 }
 
